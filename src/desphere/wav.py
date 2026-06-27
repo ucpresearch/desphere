@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import struct
 
-from .errors import MercatorError
+from .errors import DesphereError
 
 PCM_FORMAT = 1  # WAVE_FORMAT_PCM
 
@@ -43,7 +43,7 @@ def write_wav(
     # struct.pack raise an opaque struct.error mid-write. riff_size >= data_size,
     # so this one check covers both 32-bit size fields.
     if riff_size > 0xFFFFFFFF:
-        raise MercatorError(
+        raise DesphereError(
             "output exceeds the 4 GB RIFF/WAV size limit "
             f"({data_size} bytes of PCM overflow the 32-bit size fields)"
         )

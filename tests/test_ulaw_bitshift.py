@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 
-from mercator import shorten
+from desphere import shorten
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 

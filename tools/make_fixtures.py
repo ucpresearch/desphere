@@ -118,7 +118,7 @@ def make_unsupported_zoo(manifest):
         f.write(header)
         f.write(body)
     manifest["shorten_gate.sph"] = {"kind": "malformed_shorten"}
-    print("  wrote shorten_gate.sph (expected: MercatorError — no 'ajkg' magic)")
+    print("  wrote shorten_gate.sph (expected: DesphereError — no 'ajkg' magic)")
 
 
 def make_g711_zoo(manifest):

@@ -1,6 +1,6 @@
 """Write NIST SPHERE files from raw PCM samples.
 
-This is *tooling*, not part of the mercator library (mercator only reads
+This is *tooling*, not part of the desphere library (desphere only reads
 SPHERE). It exists so we can synthesize a whole zoo of test fixtures from a
 known signal — every byte order, bit depth, channel count — without needing
 real corpus files. Built from the public NIST header description only.

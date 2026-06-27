@@ -8,7 +8,7 @@ import wave
 
 import pytest
 
-from mercator import read_sphere, transcode
+from desphere import read_sphere, transcode
 
 
 def _transcode_to_bytes(path) -> bytes:

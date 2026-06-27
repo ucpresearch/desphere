@@ -1,9 +1,9 @@
-# mercator — status & handoff
+# desphere — status & handoff
 
 Snapshot for resuming work in a fresh session. Read this + `CLAUDE.md` +
 `docs/SHORTEN.md` + `memories/MEMORY.md` to get oriented.
 
-## What mercator is
+## What desphere is
 
 MIT-licensed, **clean-room** NIST SPHERE → RIFF/WAV transcoder. Reads `.sph`
 (TIMIT, WSJ, Switchboard, CALLHOME, …), optionally shorten-compressed, and emits
@@ -26,7 +26,7 @@ intent.
 oracle (never reading decoder source). A multi-agent review (see git log) then
 hardened the fail-loud paths: a v2-only version gate, header/blocksize/bitshift
 sanity caps (no decode-hang on corrupt input), a decoded-sample-count
-cross-check, EOF→`MercatorError`, a 4 GB WAV-size guard, and atomic CLI output.
+cross-check, EOF→`DesphereError`, a 4 GB WAV-size guard, and atomic CLI output.
 
 ## type-8 + BITSHIFT — SOLVED
 
@@ -62,7 +62,7 @@ bitshift, and QLPC.
 ## Key files
 
 ```
-src/mercator/
+src/desphere/
   sphere.py     SPHERE header parser
   codecs.py     capability gate (resolve_codec) + Pcm/Ulaw/Alaw/Shorten codecs
   g711.py       ITU-T G.711 μ-law/a-law tables
@@ -94,9 +94,9 @@ Dev decoders/experiments are in `scratch/` (gitignored, synced):
 
 ```bash
 # venv lives OUT of the synced repo, symlinked in (see CLAUDE.md):
-uv venv ~/local/scr/venvs/mercator --python 3.12
-ln -s ~/local/scr/venvs/mercator .venv
-VIRTUAL_ENV=$HOME/local/scr/venvs/mercator uv pip install -e ".[dev]"
+uv venv ~/local/scr/venvs/desphere --python 3.12
+ln -s ~/local/scr/venvs/desphere .venv
+VIRTUAL_ENV=$HOME/local/scr/venvs/desphere uv pip install -e ".[dev]"
 .venv/bin/python -m pytest
 
 # transcode:

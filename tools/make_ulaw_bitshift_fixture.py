@@ -20,7 +20,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 from make_qlpc_fixture import ar2_signal  # synthetic deterministic signal
-from mercator import g711
+from desphere import g711
 
 SHORTEN = os.path.join(ROOT, "oracles", "shorten")
 OUT_DIR = os.path.join(ROOT, "tests", "fixtures")

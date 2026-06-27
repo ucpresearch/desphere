@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from typing import List, Tuple
 
-from .errors import MercatorError, UnsupportedFormat
+from .errors import DesphereError, UnsupportedFormat
 
 # Bitstream constants (TR.156)
 _ULONGSIZE = 2
@@ -144,7 +144,7 @@ class _BitReader:
             # Running past the end means a truncated/corrupt stream. Raise the
             # project's error type (a no-op try in CPython when not triggered, so
             # this does not slow the hot path) instead of a bare IndexError.
-            raise MercatorError(
+            raise DesphereError(
                 "truncated or corrupt shorten stream: ran past end of bitstream"
             ) from None
         b = (byte >> (7 - self.bit)) & 1
@@ -183,9 +183,9 @@ def decode(data: bytes) -> Tuple[List[int], str, int]:
     0..255, to be expanded via G.711).
     """
     if data[:4] != _MAGIC:
-        raise MercatorError("not a shorten stream (missing 'ajkg' magic)")
+        raise DesphereError("not a shorten stream (missing 'ajkg' magic)")
     if len(data) < 5:
-        raise MercatorError("truncated shorten stream: missing version byte")
+        raise DesphereError("truncated shorten stream: missing version byte")
     br = _BitReader(data, 4)
     version = br.data[br.pos]
     br.pos += 1
@@ -209,9 +209,9 @@ def decode(data: bytes) -> Tuple[List[int], str, int]:
     # Structural sanity: a zero/negative channel count or blocksize is corrupt
     # and would otherwise crash later (modulo-by-zero, empty channel lists).
     if nchan < 1:
-        raise MercatorError(f"invalid shorten channel count {nchan}")
+        raise DesphereError(f"invalid shorten channel count {nchan}")
     if blocksize < 1:
-        raise MercatorError(f"invalid shorten blocksize {blocksize}")
+        raise DesphereError(f"invalid shorten blocksize {blocksize}")
 
     if ftype not in _SUPPORTED_FTYPES:
         raise UnsupportedFormat(
@@ -241,7 +241,7 @@ def decode(data: bytes) -> Tuple[List[int], str, int]:
         if fn == _FN_BLOCKSIZE:
             blocksize = br.ulong()
             if blocksize < 1:
-                raise MercatorError(f"invalid shorten blocksize {blocksize}")
+                raise DesphereError(f"invalid shorten blocksize {blocksize}")
             continue
         if fn == _FN_BITSHIFT:
             bitshift = br.uvar(_BITSHIFTSIZE)
@@ -271,7 +271,7 @@ def decode(data: bytes) -> Tuple[List[int], str, int]:
             # A valid block's order never exceeds maxnlpc (the history we keep);
             # a larger value is corrupt and would index past the history buffer.
             if order > maxnlpc:
-                raise MercatorError(
+                raise DesphereError(
                     f"shorten QLPC order {order} exceeds maxnlpc {maxnlpc} "
                     "(corrupt stream)"
                 )

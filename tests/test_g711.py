@@ -8,7 +8,7 @@ when fixtures/ffmpeg are unavailable.
 
 from __future__ import annotations
 
-from mercator import g711
+from desphere import g711
 
 
 def test_table_sizes_and_range():

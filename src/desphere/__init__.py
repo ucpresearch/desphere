@@ -1,4 +1,4 @@
-"""mercator — a clean-room NIST SPHERE -> RIFF/WAV transcoder.
+"""desphere — a clean-room NIST SPHERE -> RIFF/WAV transcoder.
 
 Flatten a "sphere" (NIST SPHERE audio) into a flat WAV. MIT-licensed,
 zero-dependency, built only from public format documentation and black-box
@@ -6,7 +6,7 @@ testing — never from GPL/LGPL source.
 
 Public API::
 
-    from mercator import read_sphere, transcode, sph_to_wav, SphereHeader
+    from desphere import read_sphere, transcode, sph_to_wav, SphereHeader
 
     header, data = read_sphere("utt.sph")
     with open("utt.wav", "wb") as f:
@@ -16,7 +16,7 @@ Public API::
 from __future__ import annotations
 
 from .errors import (
-    MercatorError,
+    DesphereError,
     SphereHeaderError,
     UnsupportedCoding,
     UnsupportedFormat,
@@ -34,7 +34,7 @@ __all__ = [
     "transcode",
     "sph_to_wav",
     "write_wav",
-    "MercatorError",
+    "DesphereError",
     "SphereHeaderError",
     "UnsupportedCoding",
     "UnsupportedFormat",

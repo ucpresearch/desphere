@@ -3,7 +3,7 @@
 This documents the shorten v2 bitstream as **we reverse-engineered it** from
 Tony Robinson (1994) *SHORTEN* (CUED/F-INFENG/TR.156) plus black-box validation
 against decoder *output* (ffmpeg, NIST `w_decode`, `sph2pipe` — run as binaries;
-their source was never read). Implementation: `src/mercator/shorten.py`.
+their source was never read). Implementation: `src/desphere/shorten.py`.
 
 Everything here is verified **byte-exact against an oracle** unless explicitly
 marked OPEN/unvalidated.

@@ -7,13 +7,13 @@ import os
 
 import pytest
 
-from mercator import read_sphere, transcode
-from mercator.errors import (
+from desphere import read_sphere, transcode
+from desphere.errors import (
     SphereHeaderError,
     UnsupportedCoding,
     UnsupportedFormat,
 )
-from mercator.sphere import SphereHeader
+from desphere.sphere import SphereHeader
 
 
 def _transcode(path):
@@ -30,10 +30,10 @@ def test_8bit_pcm_rejected(make_sphere):
 def test_malformed_shorten_rejected(make_sphere):
     # PCM-embedded-shorten is supported, but a shorten tag over a non-shorten
     # body (no 'ajkg' magic) must fail loudly, not emit garbage.
-    from mercator.errors import MercatorError
+    from desphere.errors import DesphereError
 
     path, _ = make_sphere(sample_coding="pcm,embedded-shorten-v2.00")
-    with pytest.raises(MercatorError, match="ajkg"):
+    with pytest.raises(DesphereError, match="ajkg"):
         _transcode(path)
 
 
@@ -50,7 +50,7 @@ def test_unknown_byte_format_rejected():
         "sample_n_bytes -i 2\nsample_byte_format -s2 99\nsample_coding -s3 pcm"
     )
     header = SphereHeader.parse(blob)
-    from mercator.codecs import resolve_codec
+    from desphere.codecs import resolve_codec
 
     codec = resolve_codec(header)
     with pytest.raises(UnsupportedFormat, match="sample_byte_format"):

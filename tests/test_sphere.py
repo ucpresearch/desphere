@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from mercator import SphereHeader, read_sphere
-from mercator.errors import SphereHeaderError
+from desphere import SphereHeader, read_sphere
+from desphere.errors import SphereHeaderError
 
 
 def test_parses_required_fields(make_sphere):

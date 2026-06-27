@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mercator"
+name = "desphere"
 version = "0.0.1"
 description = "Clean-room NIST SPHERE (and Shorten) to RIFF/WAV transcoder"
 readme = "README.md"
@@ -24,13 +24,13 @@ dependencies = []
 dev = ["pytest>=7"]
 
 [project.scripts]
-sph2wav = "mercator.cli:main"
+sph2wav = "desphere.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/ucpresearch/mercator"
+Homepage = "https://github.com/ucpresearch/desphere"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mercator"]
+packages = ["src/desphere"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

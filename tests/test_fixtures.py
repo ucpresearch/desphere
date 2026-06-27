@@ -16,8 +16,8 @@ import wave
 
 import pytest
 
-from mercator import read_sphere, transcode
-from mercator.errors import MercatorError, UnsupportedCoding, UnsupportedFormat
+from desphere import read_sphere, transcode
+from desphere.errors import DesphereError, UnsupportedCoding, UnsupportedFormat
 
 MANIFEST = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "fixtures", "manifest.json"
@@ -68,7 +68,7 @@ def test_fixture(name, spec):
         # A shorten coding tag over a body that isn't a valid shorten stream
         # must fail loudly (no 'ajkg' magic), never emit garbage.
         header, data = read_sphere(path)
-        with pytest.raises(MercatorError):
+        with pytest.raises(DesphereError):
             transcode(header, data, io.BytesIO())
     else:
         pytest.fail(f"unknown fixture kind {kind!r} for {name}")

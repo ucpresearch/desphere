@@ -16,7 +16,7 @@ import wave
 
 import pytest
 
-from mercator import read_sphere, transcode
+from desphere import read_sphere, transcode
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHN_DIR = os.path.join(ROOT, "local-fixtures", "sph2pipe")

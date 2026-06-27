@@ -1,6 +1,6 @@
-# mercator
+# desphere
 
-**Flatten a sphere.** `mercator` is a clean-room, MIT-licensed, zero-dependency
+**Flatten a sphere.** `desphere` is a clean-room, MIT-licensed, zero-dependency
 transcoder from **NIST SPHERE** audio (the `.sph` format used by TIMIT, WSJ,
 Switchboard, and friends) to plain **RIFF/WAV**. The CLI is `sph2wav`.
 
@@ -12,7 +12,7 @@ sph2wav utterance.sph -           # WAV to stdout
 ```
 
 ```python
-from mercator import read_sphere, transcode
+from desphere import read_sphere, transcode
 
 header, data = read_sphere("utterance.sph")
 with open("utterance.wav", "wb") as f:
@@ -23,12 +23,12 @@ with open("utterance.wav", "wb") as f:
 
 `libsndfile`/`soundfile` cannot read SPHERE (especially shorten-compressed
 SPHERE), and the tools that can — `sph2pipe`, the original `shorten`, FFmpeg's
-decoder — are GPL/LGPL or otherwise awkwardly licensed. `mercator` is a
+decoder — are GPL/LGPL or otherwise awkwardly licensed. `desphere` is a
 permissively licensed, dependency-free reimplementation.
 
 ## Clean-room policy
 
-`mercator` is implemented **only** from:
+`desphere` is implemented **only** from:
 
 - The **public NIST SPHERE** format description (ASCII header, typed object fields).
 - **ITU-T G.711** for μ-law / a-law.
@@ -60,7 +60,7 @@ loudly on anything not yet validated** — never emit a plausible-but-wrong WAV.
 | `ulaw,embedded-shorten` (shorten type 8), incl. bitshift | ✅ supported (Phase C) — byte-exact vs sph2pipe (real CALLHOME) |
 | shorten QLPC (LPC) blocks           | ✅ supported (Phase C) — byte-exact vs shorten encoder + ffmpeg (orders 1–20) |
 
-Adding a coding means registering a decoder in `mercator/codecs.py`; until then
+Adding a coding means registering a decoder in `desphere/codecs.py`; until then
 the gate raises a precise error.
 
 ## Test fixtures (the "zoo")
@@ -81,8 +81,8 @@ pytest                            # validate everything
 The virtualenv lives **outside** the (Syncthing-synced) repo and is symlinked in:
 
 ```bash
-uv venv ~/local/scr/venvs/mercator
-ln -s ~/local/scr/venvs/mercator .venv
+uv venv ~/local/scr/venvs/desphere
+ln -s ~/local/scr/venvs/desphere .venv
 uv pip install -e ".[dev]"
 pytest
 ```

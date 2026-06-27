@@ -1,5 +1,5 @@
 """Fail-loud robustness: corrupt/adversarial input must raise a precise
-MercatorError, never hang, crash with a bare traceback, or emit a wrong WAV.
+DesphereError, never hang, crash with a bare traceback, or emit a wrong WAV.
 
 These pin the guards added after the Phase-C review (truncation, version,
 structural fields, an unbounded bitshift DoS, the WAV size ceiling, and the
@@ -13,9 +13,9 @@ import os
 
 import pytest
 
-from mercator import shorten, transcode
-from mercator.errors import MercatorError, SphereHeaderError, UnsupportedFormat
-from mercator.wav import write_wav
+from desphere import shorten, transcode
+from desphere.errors import DesphereError, SphereHeaderError, UnsupportedFormat
+from desphere.wav import write_wav
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
@@ -64,16 +64,16 @@ def _qlpc_ar2():
         return f.read()
 
 
-def test_truncated_stream_raises_mercator_error():
+def test_truncated_stream_raises_desphere_error():
     data = _qlpc_ar2()
-    with pytest.raises(MercatorError):
+    with pytest.raises(DesphereError):
         shorten.decode(data[: len(data) // 2])
 
 
 def test_missing_magic_and_version():
-    with pytest.raises(MercatorError):
+    with pytest.raises(DesphereError):
         shorten.decode(b"nope" + b"\x00" * 8)
-    with pytest.raises(MercatorError):
+    with pytest.raises(DesphereError):
         shorten.decode(b"ajkg")  # magic but no version byte
 
 
@@ -85,9 +85,9 @@ def test_unsupported_version_fails_loud():
 
 
 def test_zero_channels_and_blocksize():
-    with pytest.raises(MercatorError):
+    with pytest.raises(DesphereError):
         shorten.decode(_stream(nchan=0))
-    with pytest.raises(MercatorError):
+    with pytest.raises(DesphereError):
         shorten.decode(_stream(blocksize=0))
 
 
@@ -105,7 +105,7 @@ def test_wav_over_4gb_raises_clean_error():
     class _FakeHuge:
         def __len__(self):
             return 0x100000000  # 4 GiB, no allocation
-    with pytest.raises(MercatorError):
+    with pytest.raises(DesphereError):
         write_wav(io.BytesIO(), channels=1, sample_rate=16000,
                   bits_per_sample=16, data=_FakeHuge())
 
@@ -113,7 +113,7 @@ def test_wav_over_4gb_raises_clean_error():
 def test_trailing_comma_coding_still_length_validates():
     # "pcm," must be treated as plain PCM (length-checked), not as a compressed
     # coding that skips the truncation guard.
-    from mercator.sphere import SphereHeader
+    from desphere.sphere import SphereHeader
     hdr = SphereHeader(
         fields={
             "sample_count": "100", "channel_count": "1", "sample_n_bytes": "2",

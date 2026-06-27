@@ -1,8 +1,8 @@
-# CLAUDE.md — mercator
+# CLAUDE.md — desphere
 
 ## Project overview
 
-**mercator** flattens a "sphere": it transcodes **NIST SPHERE** audio (`.sph`,
+**desphere** flattens a "sphere": it transcodes **NIST SPHERE** audio (`.sph`,
 used by TIMIT, WSJ, Switchboard, …) — with or without **shorten** compression —
 into plain **RIFF/WAV**. MIT-licensed, zero runtime dependencies, pure Python.
 CLI entry point: `sph2wav`. It is a standalone sibling of `praatfan-core-clean`,
@@ -28,7 +28,7 @@ Rust port until the Python side is feature-complete and validated.
 
 ## ⚠️ CRITICAL: clean-room policy (absolute)
 
-mercator must remain permissively licensable (MIT). Therefore:
+desphere must remain permissively licensable (MIT). Therefore:
 
 ### NEVER read (L)GPL source code — *ever*.
 
@@ -96,7 +96,7 @@ file *and* save a copy to `plans/` so it survives in the synced tree.
 ## 🏗️ Architecture
 
 ```
-src/mercator/
+src/desphere/
 ├── sphere.py      # NIST SPHERE header parser -> (SphereHeader, raw bytes)
 ├── codecs.py      # capability gate (resolve_codec) + PCM / G.711 decoders
 ├── g711.py        # ITU-T G.711 mu-law / a-law expansion tables
@@ -135,7 +135,7 @@ is *generated*: `python tools/make_fixtures.py` writes SPHERE variants from a
 known signal (PCM, by hand) and from exhaustive G.711 codes (all 256, with
 **ffmpeg-decoded ground truth baked into `tests/fixtures/manifest.json`** so
 tests stay self-contained). `tools/sphere_writer.py` is the SPHERE-writing
-helper (tooling only — mercator itself never *writes* SPHERE).
+helper (tooling only — desphere itself never *writes* SPHERE).
 
 Verification ladder:
 1. `pytest` — round-trips, fail-loud assertions, manifest checks (ffmpeg truth).
@@ -154,9 +154,9 @@ The virtualenv lives **outside** the synced repo, symlinked in (venvs are
 platform-specific and must not sync):
 
 ```bash
-uv venv ~/local/scr/venvs/mercator --python 3.12
-ln -s ~/local/scr/venvs/mercator .venv          # .venv is gitignored
-VIRTUAL_ENV=$HOME/local/scr/venvs/mercator uv pip install -e ".[dev]"
+uv venv ~/local/scr/venvs/desphere --python 3.12
+ln -s ~/local/scr/venvs/desphere .venv          # .venv is gitignored
+VIRTUAL_ENV=$HOME/local/scr/venvs/desphere uv pip install -e ".[dev]"
 .venv/bin/python -m pytest
 ```
 
@@ -170,7 +170,7 @@ Use `uv pip`, never bare `pip`.
 - **Phase B** ✅ — μ-law / a-law (ITU-T G.711).
 - **Phase C** ✅ — embedded-shorten (16-bit PCM + lossless μ-law type 8, incl.
   bitshift) from TR.156 + ffmpeg/sph2pipe oracles, byte-exact on real corpus
-  files (mono & stereo, incl. CALLHOME). `src/mercator/shorten.py`.
+  files (mono & stereo, incl. CALLHOME). `src/desphere/shorten.py`.
   QLPC (LPC) blocks ✅ via the black-box `shorten` encoder + ffmpeg (orders 1–20).
   Remaining (low priority): 8/24-bit linear PCM.
 

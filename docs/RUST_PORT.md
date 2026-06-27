@@ -1,6 +1,6 @@
-# Porting mercator to Rust (for formantwise-pipe / WASM)
+# Porting desphere to Rust (for formantwise-pipe / WASM)
 
-The Python decoder in `src/mercator/` is the **reference spec**: it is validated
+The Python decoder in `src/desphere/` is the **reference spec**: it is validated
 byte-exact against ffmpeg / sph2pipe / the `shorten` encoder on real and
 synthetic streams. A Rust port must reproduce its output **bit-for-bit**, so the
 subtle integer semantics below are not optional. This is the same Python-first →
@@ -61,7 +61,7 @@ Two roundings live side by side:
 ## Bit reader & EOF
 
 `get_bit` indexes the byte buffer; on a truncated/zero-padded stream the `uvar`
-unary loop walks off the end. Python raises (now `MercatorError`); Rust slice
+unary loop walks off the end. Python raises (now `DesphereError`); Rust slice
 indexing **panics** (aborts WASM). Make the reader return `Result` on EOF and
 propagate. The unary loop and `get_bits(k)` must also tolerate a large `k`
 (corrupt energy) without `<<` overflow — read against the EOF guard and cap `k`.

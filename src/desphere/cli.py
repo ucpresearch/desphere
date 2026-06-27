@@ -17,7 +17,7 @@ import sys
 import tempfile
 
 from . import __version__
-from .errors import MercatorError
+from .errors import DesphereError
 from .sphere import SphereHeader
 from .transcode import read_sphere, transcode
 
@@ -55,7 +55,7 @@ def _print_info(header: SphereHeader, in_path: str, data_len: int) -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="sph2wav",
-        description="Transcode a NIST SPHERE file to RIFF/WAV (mercator).",
+        description="Transcode a NIST SPHERE file to RIFF/WAV (desphere).",
     )
     p.add_argument("input", help="input .sph file")
     p.add_argument(
@@ -67,7 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "-f", "--force", action="store_true", help="overwrite output if it exists"
     )
-    p.add_argument("--version", action="version", version=f"mercator {__version__}")
+    p.add_argument("--version", action="version", version=f"desphere {__version__}")
     return p
 
 
@@ -76,7 +76,7 @@ def main(argv=None) -> int:
 
     try:
         header, data = read_sphere(args.input)
-    except MercatorError as exc:
+    except DesphereError as exc:
         print(f"sph2wav: {exc}", file=sys.stderr)
         return 2
     except OSError as exc:
@@ -123,7 +123,7 @@ def main(argv=None) -> int:
                 except OSError:
                     pass
                 raise
-    except MercatorError as exc:
+    except DesphereError as exc:
         print(f"sph2wav: {exc}", file=sys.stderr)
         return 2
 
