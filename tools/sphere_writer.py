@@ -95,6 +95,33 @@ def write_sphere_pcm(
         f.write(body)
 
 
+def write_sphere_raw(
+    path,
+    payload: bytes,
+    *,
+    sample_count: int,
+    sample_rate: int,
+    channel_count: int,
+    sample_n_bytes: int,
+    sample_byte_format: str,
+    sample_coding: str,
+    header_size: int = HEADER_SIZE,
+) -> None:
+    """Write a SPHERE file with an already-encoded ``payload`` (e.g. G.711)."""
+    header = build_sphere_header(
+        sample_count=sample_count,
+        sample_rate=sample_rate,
+        channel_count=channel_count,
+        sample_n_bytes=sample_n_bytes,
+        sample_byte_format=sample_byte_format,
+        sample_coding=sample_coding,
+        header_size=header_size,
+    )
+    with open(path, "wb") as f:
+        f.write(header)
+        f.write(payload)
+
+
 def sine_samples(
     n_frames: int,
     sample_rate: int,

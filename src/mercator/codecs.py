@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Tuple
 
+from . import g711
 from .errors import UnsupportedCoding, UnsupportedFormat
 from .sphere import SphereHeader
 
@@ -72,10 +73,42 @@ class PcmCodec:
         return n_bytes * 8, little
 
 
+class _G711Codec:
+    """Base for the two ITU-T G.711 companding laws (8-bit in, 16-bit out)."""
+
+    name = "g711"
+    table: list = []
+
+    @classmethod
+    def decode(cls, header: SphereHeader, data: bytes) -> Tuple[int, bytes]:
+        if header.sample_n_bytes != 1:
+            raise UnsupportedFormat(
+                f"{cls.name} expects 1-byte samples, got "
+                f"sample_n_bytes={header.sample_n_bytes}"
+            )
+        return 16, g711.expand(data, cls.table)
+
+
+class UlawCodec(_G711Codec):
+    name = "ulaw"
+    table = g711.ULAW_TABLE
+
+
+class AlawCodec(_G711Codec):
+    name = "alaw"
+    table = g711.ALAW_TABLE
+
+
 # Registry of base codings we can decode. Compression tokens are gated
 # separately (none registered yet) so shorten et al. fail with a clear message.
+# Aliases cover the spellings different encoders write into the header.
 _BASE_CODECS = {
     "pcm": PcmCodec,
+    "ulaw": UlawCodec,
+    "mu-law": UlawCodec,
+    "mulaw": UlawCodec,
+    "alaw": AlawCodec,
+    "a-law": AlawCodec,
 }
 _COMPRESSORS: dict = {}  # e.g. "embedded-shorten-v2.00" -> decoder (future)
 

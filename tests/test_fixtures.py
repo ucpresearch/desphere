@@ -41,7 +41,7 @@ def test_fixture(name, spec):
     path = os.path.join(os.path.dirname(MANIFEST), name)
     kind = spec["kind"]
 
-    if kind == "pcm":
+    if kind in ("pcm", "g711"):
         header, data = read_sphere(path)
         buf = io.BytesIO()
         transcode(header, data, buf)

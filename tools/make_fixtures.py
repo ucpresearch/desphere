@@ -26,7 +26,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import struct
 import subprocess
 import sys
 
@@ -35,7 +34,12 @@ ROOT = os.path.dirname(HERE)
 FIXTURES = os.path.join(ROOT, "tests", "fixtures")
 
 sys.path.insert(0, HERE)
-from sphere_writer import pack_pcm, sine_samples, write_sphere_pcm  # noqa: E402
+from sphere_writer import (  # noqa: E402
+    pack_pcm,
+    sine_samples,
+    write_sphere_pcm,
+    write_sphere_raw,
+)
 
 SAMPLE_RATE = 16000
 N_FRAMES = 800  # 0.05 s @ 16 kHz — small enough to commit
@@ -117,65 +121,46 @@ def make_unsupported_zoo(manifest):
     print("  wrote shorten_gate.sph (expected: UnsupportedCoding)")
 
 
-def make_oracle_zoo(manifest):
-    """Best-effort: drive external binaries to create harder codings."""
-    sox = shutil.which("sox")
-    if not sox:
-        print("  [skip] sox not found — no mu-law/a-law fixtures generated")
+def make_g711_zoo(manifest):
+    """Exhaustive G.711 fixtures: all 256 codes, with ffmpeg-decoded truth.
+
+    The payload is every possible companded byte (0..255), so the fixture pins
+    the *entire* expansion table. Ground truth is ffmpeg's pcm_mulaw/pcm_alaw
+    decoder run as a black-box binary on the raw codes — its output PCM is baked
+    into the manifest, so the test stays self-contained (no ffmpeg at test time).
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        print("  [skip] ffmpeg not found — no G.711 (mu-law/a-law) fixtures")
         return
 
-    # Build a small PCM WAV source via sox, then re-encode to SPHERE codings.
-    src_wav = os.path.join(FIXTURES, "_src.wav")
-    mono = sine_samples(N_FRAMES, SAMPLE_RATE, channels=1)
-    _write_wav(src_wav, mono, SAMPLE_RATE, 1, 2)
-
-    for coding, sox_enc in (("ulaw", "u-law"), ("alaw", "a-law")):
-        out = os.path.join(FIXTURES, f"{coding}_mono.sph")
-        cmd = [sox, src_wav, "-t", "sph", "-e", sox_enc, "-b", "8", out]
+    all_codes = bytes(range(256))
+    for coding, ff_fmt in (("ulaw", "mulaw"), ("alaw", "alaw")):
         try:
-            subprocess.run(cmd, check=True, capture_output=True)
+            proc = subprocess.run(
+                [ffmpeg, "-v", "error", "-f", ff_fmt, "-ar", str(SAMPLE_RATE),
+                 "-ac", "1", "-i", "pipe:0", "-f", "s16le", "-ac", "1",
+                 "-ar", str(SAMPLE_RATE), "pipe:1"],
+                input=all_codes, capture_output=True, check=True,
+            )
         except (subprocess.CalledProcessError, OSError) as exc:
-            print(f"  [skip] sox could not make {coding} SPHERE: {exc}")
+            print(f"  [skip] ffmpeg could not decode {coding}: {exc}")
             continue
-        # Classify by what the file ACTUALLY declares — encoders vary (e.g. some
-        # sox builds mislabel a-law as 'pcm'). The manifest must match reality.
-        kind = _classify(out)
-        manifest[f"{coding}_mono.sph"] = {"kind": kind}
-        print(f"  wrote {coding}_mono.sph via sox (declared -> {kind})")
 
-    if os.path.exists(src_wav):
-        os.remove(src_wav)
-
-
-def _classify(sph_path):
-    """Return the manifest 'kind' for a SPHERE file by what its header declares.
-
-    Mirrors mercator's capability gate so fixtures stay honest regardless of how
-    the external encoder labeled the file.
-    """
-    from mercator.sphere import SphereHeader
-
-    header, _ = SphereHeader.from_file(sph_path)
-    base = header.sample_coding.split(",")[0].strip().lower()
-    compressed = "," in header.sample_coding
-    if base != "pcm" or compressed:
-        return "unsupported_coding"
-    if header.sample_n_bytes not in (2, 4):
-        return "unsupported_format"
-    return "pcm_oracle"  # supported PCM, but payload not asserted (oracle-made)
-
-
-def _write_wav(path, samples, rate, channels, n_bytes):
-    block = channels * n_bytes
-    data = pack_pcm(samples, n_bytes, "01")
-    with open(path, "wb") as f:
-        f.write(b"RIFF")
-        f.write(struct.pack("<I", 36 + len(data)))
-        f.write(b"WAVEfmt ")
-        f.write(struct.pack("<IHHIIHH", 16, 1, channels, rate, rate * block, block, n_bytes * 8))
-        f.write(b"data")
-        f.write(struct.pack("<I", len(data)))
-        f.write(data)
+        expected = proc.stdout  # little-endian s16, 256 samples -> 512 bytes
+        name = f"{coding}_allcodes.sph"
+        write_sphere_raw(
+            os.path.join(FIXTURES, name),
+            all_codes,
+            sample_count=len(all_codes),
+            sample_rate=SAMPLE_RATE,
+            channel_count=1,
+            sample_n_bytes=1,
+            sample_byte_format="1",
+            sample_coding=coding,
+        )
+        manifest[name] = {"kind": "g711", "expected_pcm_hex": expected.hex()}
+        print(f"  wrote {name} (256 codes, ffmpeg truth = {len(expected)} bytes)")
 
 
 def main():
@@ -183,7 +168,7 @@ def main():
     print(f"Generating fixtures in {FIXTURES}")
     make_pcm_zoo(manifest)
     make_unsupported_zoo(manifest)
-    make_oracle_zoo(manifest)
+    make_g711_zoo(manifest)
     with open(os.path.join(FIXTURES, "manifest.json"), "w") as f:
         json.dump(manifest, f, indent=2, sort_keys=True)
     print(f"Wrote manifest with {len(manifest)} entries")

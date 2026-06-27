@@ -33,9 +33,10 @@ def test_shorten_coding_rejected(make_sphere):
         _transcode(path)
 
 
-def test_ulaw_coding_rejected(make_sphere):
-    path, _ = make_sphere(sample_coding="ulaw")
-    with pytest.raises(UnsupportedCoding, match="ulaw"):
+def test_ulaw_wrong_width_rejected(make_sphere):
+    # u-law is supported, but only as 8-bit; a 2-byte u-law header is invalid.
+    path, _ = make_sphere(sample_coding="ulaw", sample_n_bytes=2)
+    with pytest.raises(UnsupportedFormat, match="ulaw expects 1-byte"):
         _transcode(path)
 
 

@@ -55,7 +55,7 @@ loudly on anything not yet validated** — never emit a plausible-but-wrong WAV.
 | `pcm`, 32-bit, `01`/`10` byte order | ✅ supported |
 | `pcm`, multi-channel (interleaved)  | ✅ supported (validate against an oracle for exotic files) |
 | `pcm`, 8-bit / 24-bit               | ⛔ rejected (`UnsupportedFormat`) — sign/packing not yet validated |
-| `ulaw` / `alaw` (G.711)             | ⛔ rejected (`UnsupportedCoding`) — **Phase B** |
+| `ulaw` / `alaw` (G.711, 8-bit)      | ✅ supported (Phase B) — verified byte-exact vs ffmpeg on all 256 codes |
 | `pcm,embedded-shorten-v2.00`        | ⛔ rejected (`UnsupportedCoding`) — **Phase C** |
 
 Adding a coding means registering a decoder in `mercator/codecs.py`; until then
@@ -88,6 +88,6 @@ pytest
 ## Roadmap
 
 - **Phase A** (done): SPHERE header + 16/32-bit PCM, lossless.
-- **Phase B**: μ-law / a-law decode (ITU-T G.711).
+- **Phase B** (done): μ-law / a-law decode (ITU-T G.711).
 - **Phase C**: embedded shorten decode (from TR.156 + black-box oracle), the
   big one — validated byte-for-byte on real corpus `.sph` files.
