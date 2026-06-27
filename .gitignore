@@ -36,3 +36,7 @@ venv/
 
 # Built WASM for the web page (regenerated; deployed by CI)
 /web/pkg/
+
+# Rust build dir (the crate is a workspace member under rust/; cargo builds into
+# the workspace-root target/). Cargo.lock at the root IS committed.
+/target/

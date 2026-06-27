@@ -1,4 +1,5 @@
 /target
 /pkg
-# Cargo.lock IS committed: this crate also builds binaries (examples), a cdylib
-# (wasm/python), and is the spec-parity reference, so reproducible builds matter.
+# The committed lockfile lives at the workspace root (../Cargo.lock); cargo uses
+# that, so a stray rust/Cargo.lock here would be redundant — ignore it.
+Cargo.lock

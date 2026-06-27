@@ -1,0 +1,15 @@
+# Virtual workspace at the repository root.
+#
+# The desphere crate itself lives in `rust/` (one repo, Python reference under
+# `src/desphere`, Rust port under `rust/`). A Cargo *git* dependency resolves a
+# package by name only if it sits at the repo root or is a workspace member —
+# so this manifest declares `rust` as a member, letting downstream crates depend
+# on desphere with:
+#
+#     desphere = { git = "https://github.com/ucpresearch/desphere" }
+#
+# Local development is unaffected: `cd rust && cargo test` and maturin builds in
+# `rust/` continue to work (Cargo discovers this workspace root automatically).
+[workspace]
+resolver = "2"
+members = ["rust"]
