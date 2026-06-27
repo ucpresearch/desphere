@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Generate a self-contained QLPC shorten test fixture from a SYNTHETIC signal.
+
+A resonant AR(2) process is the kind of signal shorten compresses with its
+optional LPC predictor, so encoding it (``shorten -p N``) yields real FN_QLPC
+blocks. The signal is fully synthetic (deterministic LCG excitation), so the
+resulting fixture carries no corpus license and can be committed.
+
+This needs the black-box ``shorten`` encoder (oracles/shorten; built via
+oracles/build_shorten.sh). It writes:
+    tests/fixtures/qlpc_ar2.wav   ground-truth PCM (the encoder's input)
+    tests/fixtures/qlpc_ar2.shn   shorten stream containing QLPC blocks
+
+The test (tests/test_qlpc.py) decodes the .shn and asserts it equals the .wav,
+so it is self-contained at test time (no encoder/oracle needed).
+"""
+from __future__ import annotations
+import os
+import struct
+import subprocess
+import sys
+import wave
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SHORTEN = os.path.join(ROOT, "oracles", "shorten")
+OUT_DIR = os.path.join(ROOT, "tests", "fixtures")
+
+
+def ar2_signal(n=4096, a1=1.7, a2=-0.72, drive=300.0, seed=12345):
+    """Deterministic resonant AR(2) signal, clipped to int16."""
+    x = seed
+    s = [0.0, 0.0]
+    out = []
+    for _ in range(n):
+        x = (1103515245 * x + 12345) & 0x7FFFFFFF
+        e = ((x / 0x7FFFFFFF) * 2 - 1) * drive
+        nxt = a1 * s[-1] + a2 * s[-2] + e
+        s.append(nxt)
+        out.append(max(-30000, min(30000, int(round(nxt)))))
+    return out
+
+
+def _write(name, channels):
+    """channels: list of per-channel int16 lists (all same length). Writes a WAV
+    + a shorten -p 3 (QLPC) stream; returns (wav, shn)."""
+    wav = os.path.join(OUT_DIR, name + ".wav")
+    shn = os.path.join(OUT_DIR, name + ".shn")
+    n = len(channels[0])
+    inter = [s for i in range(n) for s in (c[i] for c in channels)]
+    with wave.open(wav, "wb") as w:
+        w.setnchannels(len(channels)); w.setsampwidth(2); w.setframerate(16000)
+        w.writeframes(struct.pack("<%dh" % len(inter), *inter))
+    # -p 3 forces the LPC search; -v2 is the SPHERE embedded-shorten version.
+    subprocess.run([SHORTEN, "-p", "3", "-v2", wav, shn], check=True)
+    print("wrote", wav, "and", shn, f"({os.path.getsize(shn)} bytes)")
+
+
+def main():
+    if not os.path.exists(SHORTEN):
+        sys.exit("need oracles/shorten (build via oracles/build_shorten.sh)")
+    os.makedirs(OUT_DIR, exist_ok=True)
+    _write("qlpc_ar2", [ar2_signal()])
+    # stereo: two distinct AR(2) channels -> exercises alternating-channel QLPC.
+    _write("qlpc_ar2_stereo",
+           [ar2_signal(seed=12345), ar2_signal(a1=1.4, a2=-0.6, seed=999)])
+
+
+if __name__ == "__main__":
+    main()

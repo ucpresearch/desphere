@@ -19,23 +19,42 @@ intent.
 | μ-law / a-law (G.711) | ✅ (incl. real CALLHOME stereo, sph2pipe a-law) |
 | PCM embedded-shorten (16-bit) | ✅ vs ffmpeg, mono & stereo |
 | μ-law embedded-shorten (type 8), **no bitshift** | ✅ vs w_decode + sph2pipe |
-| μ-law embedded-shorten **with bitshift** | ⛔ fail-loud — **the open problem** |
-| shorten QLPC blocks | ⛔ `UnsupportedFormat` |
+| μ-law embedded-shorten **with bitshift** | ✅ vs sph2pipe (real CALLHOME, 14.4M samples) + shorten encoder (shift 0–3,12) |
+| shorten QLPC blocks | ✅ vs shorten encoder + ffmpeg (orders 1–20) |
 
-39 tests pass (`pytest`). All "✅" verified byte-for-byte against a black-box
+46 tests pass (`pytest`). All "✅" verified byte-for-byte against a black-box
 oracle (never reading decoder source).
 
-## The one open problem: type-8 + BITSHIFT
+## type-8 + BITSHIFT — SOLVED
 
-Loud real speech (CALLHOME, Switchboard) shorten-encodes μ-law with `FN_BITSHIFT`,
-and our reconstruction diverges. Full evidence + how to resume in
-`docs/SHORTEN.md` → "OPEN PROBLEM". Short version: the true index can be **odd**
-while `v << bitshift` is always even, so the bitshift semantics and the
-full-range `v→μ-law` table are entangled and need disentangling against the
-`sph2pipe` oracle (which decodes these files fine). Until solved we **fail loud**.
+Loud real speech (CALLHOME `LDC96S34`) shorten-encodes μ-law with `FN_BITSHIFT`.
+The fix: bitshift on type-8 is **not** a linear shift — it's a piecewise-linear
+remap in mu-law **magnitude-code** space (slope `2^shift`, halving at each 16-code
+segment boundary). Closed form + derivation in `docs/SHORTEN.md` → "Type 8 +
+BITSHIFT — SOLVED". Byte-exact vs `sph2pipe` on the full CALLHOME file (both
+channels). Also disproved the old red herring: the `v→μ-law` table was always
+correct (it's the exact G.711 sort order across all 256 codes).
 
-This is the natural next task. It does **not** block the common cases (plain
-TIMIT/CALLHOME μ-law, PCM-shorten, quiet μ-law-shorten all work).
+## QLPC — SOLVED
+
+No `.sph` in the corpus uses QLPC (sph2pipe/NIST default to polynomial DIFF), so
+we built the black-box `shorten` **encoder** (`oracles/build_shorten.sh`,
+compiled never-reading-source) to synthesize QLPC streams from known input and
+reverse-engineered the decode byte-exact (orders 1–20, vs the encoder + ffmpeg).
+Algorithm in `docs/SHORTEN.md` → "QLPC blocks"; committed synthetic fixture
+(`tools/make_qlpc_fixture.py`, `tests/test_qlpc.py`). The same encoder let us
+push bitshift to 3/12 on nonzero codes, confirming the derived `a_j` formula and
+removing the old shift≥3 fail-loud guard.
+
+## What's left
+
+- **8-bit / 24-bit linear PCM**: no such file in the corpus, and the sign/packing
+  conventions are genuinely ambiguous; common 8-bit SPHERE is μ-law/a-law (already
+  supported). Could synthesize + check against ffmpeg, but that only proves
+  self-consistency, not the real-corpus convention. Low priority.
+
+All shorten paths now work: PCM-shorten, μ-law-shorten (type 8) with/without
+bitshift, and QLPC.
 
 ## Key files
 
@@ -57,7 +76,9 @@ tests/            pytest; test_shorten_local.py gates on local-fixtures/
 Binaries are in `oracles/` (gitignored, synced; see `oracles/README.md`):
 - `oracles/sph2pipe` — robust, decodes everything incl. CALLHOME type-8+bitshift.
 - `oracles/w_decode` — type-8 on small files (corrupts on large ones).
-- system `ffmpeg` — PCM-shorten + plain PCM/G.711 (not type-8 ulaw-shorten).
+- `oracles/shorten` — the **encoder** (build via `oracles/build_shorten.sh`), used
+  to synthesize QLPC + high-bitshift test files; also a 2nd decoder via `-x`.
+- system `ffmpeg` — PCM-shorten + plain PCM/G.711 + QLPC (not type-8 ulaw-shorten).
 
 Real corpus `.sph` files (license-restricted) live in `local-fixtures/`
 (gitignored, synced): `sph2pipe/` (the 123_* test set), `timit/`, `ldc/`.
@@ -83,7 +104,7 @@ VIRTUAL_ENV=$HOME/local/scr/venvs/mercator uv pip install -e ".[dev]"
 
 - **Now → Python.** Develop and debug in Python (this repo). Keep the Python
   implementation as the readable reference and for most use — it stays.
-- **Next acoustic-feature work: type-8 + bitshift** (see above).
+- **Next (optional, low priority):** 8/24-bit linear PCM (see above).
 - **Eventually → Rust.** Port to a Rust library (mirroring `praatfan-core-clean`'s
   Python-first-then-Rust approach) so that **`formantwise-core` can import it**.
   The Python decoder is the spec the Rust port validates against; both check

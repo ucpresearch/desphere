@@ -51,7 +51,7 @@ Read `cmd = uvar(FNSIZE)` repeatedly until `QUIT`:
 | 4 | QUIT | end of stream |
 | 5 | BLOCKSIZE | `blocksize = ulong()` |
 | 6 | BITSHIFT | `bitshift = uvar(BITSHIFTSIZE)` |
-| 7 | QLPC | LPC-predicted block — **OPEN, not implemented** |
+| 7 | QLPC | LPC-predicted block (below) |
 | 8 | ZERO | a block of `blocksize` zeros |
 | 9 | VERBATIM | `n = uvar(5)`; then `n` bytes of `uvar(8)` (discarded for audio) |
 
@@ -83,40 +83,87 @@ The `+blocksize/2` per-block rounding bias is essential: without it, channels
 with negative DC drift by exactly 1 (only caught because stereo ch1 ≈ −ch0, so
 ch0 passed and ch1 failed). When `nmean == 0`, offset is 0.
 
+### QLPC blocks (LPC prediction)
+
+Reverse-engineered byte-exact against the `shorten` encoder + ffmpeg (orders
+1..20, v2). Layout after the `FN_QLPC` command:
+
+```
+energy = uvar(ENERGYSIZE)          # residual Rice parameter k = energy+1 (as DIFF)
+order  = uvar(LPCQSIZE)            # LPCQSIZE = 2; per-block LPC order
+coef   = [ var(LPCQUANT+1) for _ in range(order) ]   # LPCQUANT = 5 -> coeffs are var(6)
+offset = running mean              # same coffset() as DIFF0
+for each of blocksize samples:
+    r   = var(k)
+    dot = Σ_j coef[j] * (hist[t-1-j] - offset)        # hist carried across blocks
+    v   = r + ((dot + (1 << LPCQUANT)) >> LPCQUANT) + offset
+```
+
+Notes (each was a non-obvious, oracle-pinned detail): coefficients are coded with
+**one extra bit** beyond the fixed-point precision (`var(LPCQUANT+1)`); the
+residual `k` is `energy+1` exactly as DIFF; the predictor works on the
+**mean-removed** history and adds the mean back; and the rounding term is
+`1 << LPCQUANT` (a +1 after the shift), *not* the usual `1 << (LPCQUANT-1)`.
+QLPC needs `maxnlpc` samples of history (vs 3 for DIFF). Note: **no NIST/SPHERE
+corpus file uses QLPC** — the encoders default to polynomial DIFF — so the
+fixture is synthetic (`tools/make_qlpc_fixture.py`).
+
 ### BITSHIFT
 
-For PCM types, the reconstructed value is `<< bitshift` at output (history keeps
-the pre-shift value). **Untested** — the validated PCM files use `bitshift = 0`.
+Prediction and the running mean stay in the **pre-shift** reconstructed domain
+(the residuals were coded there); bitshift is applied only as an output
+transform, and the per-channel history keeps the pre-shift values. For PCM types
+output is `v << bitshift` (untested — the validated PCM files use `bitshift = 0`).
+For type-8 mu-law the shift is **not** linear; see below.
 
 ## Type 8 — lossless mu-law
 
-The reconstructed value `v` is a **sorted-code index**, not a sample. Map it to a
-mu-law byte, then G.711-expand to PCM for WAV:
+The reconstructed value `v` is a **sorted-code index**, not a sample. With
+`bitshift = 0`, map it directly to a mu-law byte, then G.711-expand to PCM:
 
 ```
 ulaw_byte = (255 - v) if v >= 0 else (128 + v)      # v in [-128,127] ↔ [0,255]
 ```
 
-Verified byte-exact (vs `w_decode` and `sph2pipe`) on the small sph2pipe
-ulaw-shorten files (which have `bitshift = 0` and small `|v|`).
+This is exactly the G.711 sort order — **verified byte-exact for all 256 codes**
+(the rank of each mu-law byte sorted by its expanded linear value equals this
+formula), and byte-exact vs `w_decode`/`sph2pipe` on the sph2pipe ulaw files.
 
-### OPEN PROBLEM: type 8 + BITSHIFT
+### Type 8 + BITSHIFT — SOLVED (byte-exact vs sph2pipe)
 
-Loud real speech (CALLHOME, e.g. `LDC96S34`) emits `FN_BITSHIFT` (values 0/1
-alternating) on the 8-bit mu-law domain, and our reconstruction diverges in loud
-regions. Evidence (vs `sph2pipe` oracle): first divergence at frame 7682, ch0,
-`bitshift=1`, DIFF1 — the **true index is −3 (odd)**, but `v << bitshift` is
-always even. So:
-1. BITSHIFT does **not** simply mean `index = v << bitshift` here, and
-2. the full-range `v → mu-law` table may differ from the linear formula above
-   (only validated for `v ∈ [-70,66]`).
+Loud real speech (CALLHOME, e.g. `LDC96S34`) emits `FN_BITSHIFT` on the mu-law
+stream. The old suspicion that the `v → mu-law` table was wrong is **disproven**
+(it's the exact G.711 sort order, above). The actual subtlety: **bitshift on
+type-8 is not a linear-amplitude shift** (`v << bitshift` is always even, but
+true indices can be odd) — it is a remap in mu-law **magnitude-code** space.
 
-These two unknowns are entangled. Resolve with the `sph2pipe` oracle (it decodes
-CALLHOME fine): `sph2pipe -u -f raw file.sph` gives the true mu-law byte stream;
-`-p -f wav` gives PCM. Convert true mu-law → true index and compare to the
-reconstructed `v` (accounting for bitshift) to disentangle the table from the
-shift semantics. Until solved, `shorten.py` **fails loud** on type-8 +
-nonzero-bitshift and on out-of-range type-8 values — never emits guessed audio.
+Write the reconstructed `v` as sign + magnitude code `C`: `C = v` for `v ≥ 0`,
+`C = |v| − 1` for `v < 0` (so `C ≥ 0`). The shift sends `C → C_out` where the
+output grows at slope `2^bitshift` inside mu-law segment 0 and the slope
+**halves at every 16-code segment boundary** (`C_out = 16, 32, 48, …`) until it
+reaches 1. Segment geometry forces the closed form:
+
+```
+C_out = min over j in [0, bitshift] of ( (C << (bitshift - j)) + a_j )
+a_j   = 8*j + a_{j-1} // 2            # a = 0, 8, 20, 34, 49, ...
+```
+
+e.g. `bitshift=1 → C_out = min(2C, C+8)`; `bitshift=2 → min(4C, 2C+8, C+20)`.
+Then re-attach the sign (`rank = C_out` if `v ≥ 0` else `-(C_out + 1)`) and map
+the rank to a mu-law byte as above. History/mean use the **pre-shift** `v`.
+
+Validated **byte-exact vs `sph2pipe`** on `LDC96S34-ma_0671.sph` (both channels,
+14.4M samples; bitshift 0/1/2 on audio, 12 on silence) and **byte-exact vs the
+`shorten` encoder + ffmpeg** on synthetic mu-law crafted to force higher shifts
+(bitshift 3 and 12 on nonzero codes — `tools/make_ulaw_bitshift_fixture.py`).
+The `a_1=8`/`a_2=20` intercepts the oracle shows are exactly what segment
+boundaries 16/32 predict, and `a_3=34` checks out too — the geometric model *is*
+the mechanism. Implemented in `shorten.py` (`_shift_code` / `_ulaw_value_to_byte`);
+the closed form is used for all shifts (output code saturates at 127).
+
+Oracle recipe (for re-deriving): `sph2pipe -u -f raw -c N file.sph` gives the
+true mu-law byte stream per channel; convert byte → rank and compare to the
+reconstructed `v` per `bitshift` to read off `C_out = f(C, bitshift)`.
 
 ## Validation oracles (black-box only — never read their source)
 

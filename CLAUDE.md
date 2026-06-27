@@ -8,10 +8,11 @@ into plain **RIFF/WAV**. MIT-licensed, zero runtime dependencies, pure Python.
 CLI entry point: `sph2wav`. It is a standalone sibling of `praatfan-core-clean`,
 the same author's low-level acoustic stack.
 
-> **Resuming work? Start here:** read `docs/STATUS.md` (current state + the one
-> open problem), `docs/SHORTEN.md` (the clean-room shorten algorithm we derived),
-> and `memories/MEMORY.md` (synced working notes). The open task is **type-8
-> shorten + bitshift** (loud μ-law speech) — see `docs/SHORTEN.md` → OPEN PROBLEM.
+> **Resuming work? Start here:** read `docs/STATUS.md` (current state),
+> `docs/SHORTEN.md` (the clean-room shorten algorithm we derived), and
+> `memories/MEMORY.md` (synced working notes). type-8 shorten + bitshift **and**
+> QLPC are **solved** (byte-exact). The only remaining gap is 8/24-bit linear PCM
+> (rare; no corpus test file; low priority).
 
 ## Architecture & roadmap (Python-first, Rust-eventual)
 
@@ -122,7 +123,8 @@ Adding a coding = registering a decoder. Until then the gate raises a precise
 | `pcm` 8-bit / 24-bit | ⛔ `UnsupportedFormat` (conventions unvalidated) |
 | `ulaw` / `alaw` (G.711, 8-bit) | ✅ supported (Phase B) |
 | `pcm,embedded-shorten-v2.00` (16-bit) | ✅ supported (Phase C) — byte-exact vs ffmpeg, mono & stereo |
-| `ulaw,embedded-shorten` (shorten type 8) / QLPC | ⛔ `UnsupportedFormat` — future work |
+| `ulaw,embedded-shorten` (shorten type 8), incl. **bitshift** | ✅ supported — byte-exact vs sph2pipe (real CALLHOME) |
+| shorten QLPC (LPC) blocks | ✅ supported — byte-exact vs shorten encoder + ffmpeg (orders 1–20) |
 
 ---
 
@@ -166,9 +168,11 @@ Use `uv pip`, never bare `pip`.
 
 - **Phase A** ✅ — SPHERE header + 16/32-bit PCM, lossless.
 - **Phase B** ✅ — μ-law / a-law (ITU-T G.711).
-- **Phase C** ✅ — embedded-shorten (16-bit PCM) from TR.156 + ffmpeg oracle,
-  byte-exact on real sph2pipe corpus files (mono & stereo). `src/mercator/shorten.py`.
-  Remaining: shorten lossless-μ-law (type 8) + QLPC blocks.
+- **Phase C** ✅ — embedded-shorten (16-bit PCM + lossless μ-law type 8, incl.
+  bitshift) from TR.156 + ffmpeg/sph2pipe oracles, byte-exact on real corpus
+  files (mono & stereo, incl. CALLHOME). `src/mercator/shorten.py`.
+  QLPC (LPC) blocks ✅ via the black-box `shorten` encoder + ffmpeg (orders 1–20).
+  Remaining (low priority): 8/24-bit linear PCM.
 
 ### Shorten decode notes (hard-won, validated vs ffmpeg)
 

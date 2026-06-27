@@ -45,23 +45,76 @@ _FN_QLPC, _FN_ZERO, _FN_VERBATIM = 7, 8, 9
 # Sample types. 16-bit PCM: HL = stored big-endian, LH = little-endian — both
 # decode to the same integer samples, emitted as little-endian WAV. ULAW
 # (type 8) is shorten's lossless mu-law mode: the reconstructed values live in a
-# monotonic "sorted-code" domain and map back to mu-law bytes (see _val_to_ulaw).
+# monotonic "sorted-code" domain and map back to mu-law bytes (see
+# _ulaw_value_to_byte).
 _TYPE_S16HL = 3
 _TYPE_S16LH = 5
 _TYPE_ULAW = 8
 _SUPPORTED_FTYPES = (_TYPE_S16HL, _TYPE_S16LH, _TYPE_ULAW)
 
 
-def _val_to_ulaw(v: int) -> int:
-    """Map a shorten type-8 reconstructed value to its mu-law byte (0..255).
+def _shift_code(C: int, s: int) -> int:
+    """Left-shift a mu-law *magnitude code* ``C`` (0..127) by ``s`` in code space.
 
-    Derived by black-box comparison against NIST ``w_decode`` output:
-    v in [-128,127] maps bijectively onto mu-law [0,255].
+    Type-8 bitshift is NOT a linear-amplitude shift; against the sph2pipe oracle
+    it is a piecewise-linear remap of the companded code: the output grows at
+    slope ``2**s`` inside mu-law segment 0 and the slope halves at every 16-code
+    segment boundary until it reaches 1. Geometry (segment boundaries at 16, 32,
+    48, ...) forces the closed form ``C_out = min_j(2**(s-j)*C + a_j)`` with
+    intercepts ``a_j = 8*j + a_{j-1}//2`` = 0, 8, 20, 34, 49, ...  (a_1=8 and
+    a_2=20 are exactly what the oracle shows; see docs/SHORTEN.md).
     """
-    return (255 - v) if v >= 0 else (128 + v) & 0xFF
+    best = C << s
+    a = 0
+    for j in range(1, s + 1):
+        a = 8 * j + (a >> 1)
+        cand = (C << (s - j)) + a
+        if cand < best:
+            best = cand
+    return best
+
+
+def _ulaw_value_to_byte(v: int, bitshift: int) -> int:
+    """Map a type-8 reconstructed value + active bitshift to a mu-law byte.
+
+    ``v`` is the reconstructed value in shorten's sorted-code (rank) domain;
+    ``v in [-128,127]`` maps bijectively onto mu-law [0,255] and is exactly the
+    G.711 sort order (verified byte-exact vs w_decode/sph2pipe). With a nonzero
+    bitshift the shift is applied in mu-law *magnitude-code* space (see
+    :func:`_shift_code`); history/prediction stay in the pre-shift rank domain.
+    """
+    if bitshift == 0:
+        if not -128 <= v <= 127:
+            raise UnsupportedFormat(
+                f"shorten type-8 reconstructed value {v} is outside the "
+                "8-bit mu-law domain — an unvalidated code path"
+            )
+        return (255 - v) if v >= 0 else (128 + v) & 0xFF
+
+    # split into sign + magnitude code: rank r>=0 -> C=r; r<0 -> C=|r|-1
+    if v >= 0:
+        sign, C = 0, v
+    else:
+        sign, C = 1, -v - 1
+    C = _shift_code(C, bitshift)
+    if C > 127:
+        C = 127  # saturate to the loudest magnitude code
+    rank = C if sign == 0 else -(C + 1)
+    return (255 - rank) if rank >= 0 else (rank + 128) & 0xFF
 
 _MAGIC = b"ajkg"
-_NWRAP = 3  # history samples needed for DIFF3
+_NWRAP = 3  # history samples needed for DIFF3 (QLPC needs maxnlpc; see decode)
+
+# QLPC (LPC-predicted) block parameters, reverse-engineered byte-exact against
+# the `shorten` encoder + ffmpeg (orders 1..20, v2): per block the order is
+# uvar(2); each quantized coefficient is var(6); the residual Rice parameter is
+# energy+1 (as for DIFF); and the predictor is
+#     pred = (Σ coef[j]·(hist[t-1-j] - offset) + (1 << _LPC_QUANT)) >> _LPC_QUANT
+# with `offset` the same running-mean used by DIFF0.  _LPC_QUANT is the
+# coefficient fixed-point precision (prediction right-shift); coefficients are
+# coded with one extra bit (var(_LPC_QUANT + 1)).
+_LPCQSIZE = 2
+_LPC_QUANT = 5
 
 
 def _cdiv(a: int, b: int) -> int:
@@ -139,8 +192,10 @@ def decode(data: bytes) -> Tuple[List[int], str, int]:
             f"(supported: {_SUPPORTED_FTYPES} = 16-bit PCM and lossless mu-law)"
         )
 
+    # QLPC needs `maxnlpc` samples of history; DIFF needs 3. Keep the larger.
+    nwrap = maxnlpc if maxnlpc > _NWRAP else _NWRAP
     chan_out: List[List[int]] = [[] for _ in range(nchan)]
-    chan_hist = [[0] * _NWRAP for _ in range(nchan)]
+    chan_hist = [[0] * nwrap for _ in range(nchan)]
     means: List[List[int]] = [[] for _ in range(nchan)]
     bitshift = 0
     ch = 0
@@ -161,28 +216,31 @@ def decode(data: bytes) -> Tuple[List[int], str, int]:
             continue
         if fn == _FN_BITSHIFT:
             bitshift = br.uvar(_BITSHIFTSIZE)
-            if bitshift and ftype == _TYPE_ULAW:
-                # bitshift interacting with the 8-bit mu-law domain is a code
-                # path we cannot validate: the only oracle (NIST w_decode)
-                # corrupts memory on the large real-speech files that use it.
-                raise UnsupportedFormat(
-                    "shorten lossless mu-law (type 8) with bitshift is not yet "
-                    "validated (no working decode oracle for this case)"
-                )
             continue
         if fn == _FN_VERBATIM:
             n = br.uvar(_VERBATIM_CKSIZE)
             for _ in range(n):
                 br.uvar(_VERBATIM_BYTE)
             continue
-        if fn == _FN_QLPC:
-            raise UnsupportedFormat(
-                "shorten QLPC (LPC-predicted) blocks not supported yet"
-            )
 
         hist = chan_hist[ch]
         if fn == _FN_ZERO:
             blk = [0] * blocksize
+        elif fn == _FN_QLPC:
+            k = br.uvar(_ENERGYSIZE) + 1
+            order = br.uvar(_LPCQSIZE)
+            coef = [br.var(_LPC_QUANT + 1) for _ in range(order)]
+            off = coffset(ch)
+            buf = list(hist)
+            blk = []
+            for _ in range(blocksize):
+                r = br.var(k)
+                dot = 0
+                for j in range(order):
+                    dot += coef[j] * (buf[-1 - j] - off)
+                v = r + ((dot + (1 << _LPC_QUANT)) >> _LPC_QUANT) + off
+                blk.append(v)
+                buf.append(v)
         elif fn in (_FN_DIFF0, _FN_DIFF1, _FN_DIFF2, _FN_DIFF3):
             k = br.uvar(_ENERGYSIZE) + 1
             off = coffset(ch) if fn == _FN_DIFF0 else 0
@@ -203,13 +261,20 @@ def decode(data: bytes) -> Tuple[List[int], str, int]:
         else:
             raise UnsupportedFormat(f"unknown shorten function code {fn}")
 
-        if bitshift:
-            blk = [v << bitshift for v in blk]
-
-        chan_out[ch].extend(blk)
-        chan_hist[ch] = (hist + blk)[-_NWRAP:]
+        # Prediction history and the running mean stay in the *pre-shift*
+        # reconstructed domain (the residuals were coded there); bitshift is a
+        # purely cosmetic output transform.  This matters for type-8: the shift
+        # is non-linear in code space, so shifting history would desync DIFF.
+        chan_hist[ch] = (hist + blk)[-nwrap:]
         if nmean:
             means[ch].append(_cdiv(sum(blk) + blocksize // 2, blocksize))
+
+        if ftype == _TYPE_ULAW:
+            chan_out[ch].extend(_ulaw_value_to_byte(v, bitshift) for v in blk)
+        elif bitshift:
+            chan_out[ch].extend(v << bitshift for v in blk)
+        else:
+            chan_out[ch].extend(blk)
         ch = (ch + 1) % nchan
 
     n = min(len(c) for c in chan_out) if chan_out else 0
@@ -218,14 +283,6 @@ def decode(data: bytes) -> Tuple[List[int], str, int]:
         for c in chan_out:
             interleaved.append(c[i])
 
-    if ftype == _TYPE_ULAW:
-        out = []
-        for v in interleaved:
-            if not -128 <= v <= 127:
-                raise UnsupportedFormat(
-                    f"shorten type-8 reconstructed value {v} is outside the "
-                    "8-bit mu-law domain — an unvalidated code path"
-                )
-            out.append(_val_to_ulaw(v))
-        return out, "ulaw", nchan
-    return interleaved, "pcm16", nchan
+    # For ULAW, chan_out already holds mu-law bytes (0..255); for PCM types it
+    # holds signed 16-bit samples.
+    return interleaved, ("ulaw" if ftype == _TYPE_ULAW else "pcm16"), nchan

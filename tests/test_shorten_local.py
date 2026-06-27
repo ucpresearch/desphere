@@ -20,6 +20,7 @@ from mercator import read_sphere, transcode
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHN_DIR = os.path.join(ROOT, "local-fixtures", "sph2pipe")
+LDC_DIR = os.path.join(ROOT, "local-fixtures", "ldc")
 SPH2PIPE = os.path.join(ROOT, "oracles", "sph2pipe")
 
 # All sph2pipe shorten test files: PCM (LE/BE) and μ-law, mono and stereo.
@@ -57,3 +58,14 @@ def test_shorten_matches_sph2pipe(name):
     if not os.path.exists(path):
         pytest.skip(f"{name} not present in local-fixtures/")
     assert _our_pcm(path) == _oracle_pcm(path), f"{name}: decode differs from sph2pipe"
+
+
+# Real CALLHOME conversation: lossless mu-law shorten (type 8) that uses
+# FN_BITSHIFT on loud speech — the case that was the project's open problem.
+# ~7.2M samples/channel, so the pure-Python decode is slow; gated on the file.
+@pytest.mark.skipif(not os.path.exists(SPH2PIPE), reason="sph2pipe oracle absent")
+def test_ulaw_shorten_bitshift_matches_sph2pipe():
+    path = os.path.join(LDC_DIR, "LDC96S34-ma_0671.sph")
+    if not os.path.exists(path):
+        pytest.skip("LDC96S34-ma_0671.sph not present in local-fixtures/")
+    assert _our_pcm(path) == _oracle_pcm(path), "type-8+bitshift differs from sph2pipe"
