@@ -1,0 +1,31 @@
+# maturin build config for the pyo3 extension module `desphere_native`.
+# Build:  maturin develop -m rust/pyproject.toml --features python
+#   or:   maturin build   -m rust/pyproject.toml --features python --release
+#
+# This is the OPTIONAL fast/native module. The pure-Python `desphere` package
+# (repo root pyproject.toml) remains the reference; formantwise-pipe can import
+# `desphere_native` for speed.
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "desphere-native"
+version = "0.0.1"
+description = "Rust/pyo3 NIST SPHERE (and Shorten) to RIFF/WAV transcoder"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "Uriel Cohen Priva" }]
+keywords = ["sphere", "nist", "shorten", "wav", "audio", "transcode"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Multimedia :: Sound/Audio :: Conversion",
+]
+
+[tool.maturin]
+features = ["python"]
+module-name = "desphere_native"
