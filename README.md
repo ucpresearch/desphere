@@ -91,7 +91,10 @@ pytest
 
 - **Phase A** (done): SPHERE header + 16/32-bit PCM, lossless.
 - **Phase B** (done): μ-law / a-law decode (ITU-T G.711).
-- **Phase C** (done): embedded-shorten decode of 16-bit PCM (from TR.156 +
-  black-box ffmpeg oracle) — validated byte-for-byte on real corpus `.sph`
-  files, mono and stereo. Remaining: shorten's lossless-μ-law mode (type 8) and
-  QLPC blocks.
+- **Phase C** (done, with one gap): embedded-shorten of 16-bit PCM and lossless
+  μ-law (type 8), validated byte-for-byte vs ffmpeg / sph2pipe on real corpus
+  files, mono and stereo. **Open:** type-8 + bitshift (loud μ-law speech) and
+  QLPC blocks — both currently fail loud. See `docs/STATUS.md` and `docs/SHORTEN.md`.
+- **Eventually → Rust.** A Rust port (for `formantwise-core` to import, and for
+  speed) mirroring `praatfan-core-clean`'s Python-first-then-Rust path. The
+  Python implementation stays as the readable reference. See `docs/STATUS.md`.

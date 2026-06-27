@@ -18,6 +18,10 @@ venv/
 # Synced via Syncthing for cross-machine local testing; never committed.
 /local-fixtures/
 
+# Black-box oracle binaries (sph2pipe, NIST w_decode). Used to validate decode
+# output only — we never read their source. Synced via Syncthing, not committed.
+/oracles/
+
 # Local working state — Syncthing-synced, not committed (see CLAUDE.md)
 /memories/
 /plans/

@@ -8,6 +8,21 @@ into plain **RIFF/WAV**. MIT-licensed, zero runtime dependencies, pure Python.
 CLI entry point: `sph2wav`. It is a standalone sibling of `praatfan-core-clean`,
 the same author's low-level acoustic stack.
 
+> **Resuming work? Start here:** read `docs/STATUS.md` (current state + the one
+> open problem), `docs/SHORTEN.md` (the clean-room shorten algorithm we derived),
+> and `memories/MEMORY.md` (synced working notes). The open task is **type-8
+> shorten + bitshift** (loud μ-law speech) — see `docs/SHORTEN.md` → OPEN PROBLEM.
+
+## Architecture & roadmap (Python-first, Rust-eventual)
+
+Develop and debug in **Python** (this repo) — it stays as the readable reference
+implementation and for most use. The eventual target is a **Rust** port that
+**`formantwise-core` can import** (same Python-first-then-Rust path as
+`praatfan-core-clean`): the Python decoder is the spec the Rust port validates
+against, both checked against the same black-box oracle outputs. Rust also closes
+the perf gap (pure-Python shorten is slow on multi-minute files). Don't start the
+Rust port until the Python side is feature-complete and validated.
+
 ---
 
 ## ⚠️ CRITICAL: clean-room policy (absolute)
