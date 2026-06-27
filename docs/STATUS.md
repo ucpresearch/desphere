@@ -107,8 +107,10 @@ VIRTUAL_ENV=$HOME/local/scr/venvs/desphere uv pip install -e ".[dev]"
 
 - **PyPI** is the only target registry. Model: **Python-first + optional native
   accel** — `pip install desphere` (pure, zero-dep, the spec); `desphere[fast]`
-  adds the Rust `desphere-native` wheel, which `transcode_bytes`/the CLI use
-  transparently (fallback to pure Python otherwise).
+  adds the Rust `desphere-native` wheel. The whole decode path — streaming
+  `transcode()`, one-shot `transcode_bytes()`, and the CLI — uses it transparently
+  (it delegates the shorten + G.711 kernels; typed checks stay in Python; falls
+  back to pure Python otherwise, byte-identical).
 - **No crates.io / npm**: the Rust client and a WASM web app live in the same
   `ucpresearch` org and consume `rust/` via path/git deps directly (praatfan is a
   likely consumer).

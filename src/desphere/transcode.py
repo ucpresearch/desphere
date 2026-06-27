@@ -9,9 +9,10 @@ from .errors import DesphereError, SphereHeaderError
 from .sphere import SphereHeader
 from .wav import write_wav
 
-# Optional Rust accelerator (pip install desphere[fast]). The pure-Python path
-# below is the reference and always works; the native module just makes the slow
-# path (shorten on large files) fast. Same byte-for-byte output.
+# Optional Rust accelerator (pip install desphere[fast]). The pure-Python path is
+# the reference and always works. `transcode_bytes` uses the whole-file native
+# entry point; the streaming `transcode()` accelerates via the codecs (which
+# delegate the shorten + G.711 kernels to native). Same byte-for-byte output.
 try:
     import desphere_native as _native
 except ImportError:  # pragma: no cover - native is optional

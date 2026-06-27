@@ -26,12 +26,15 @@ header, data = read_sphere("utterance.sph")
 with open("utterance.wav", "wb") as f:
     transcode(header, data, f)
 
-# One-shot bytes API — transparently uses the Rust accelerator if installed:
+# One-shot bytes API:
 wav_bytes = transcode_bytes(open("utterance.sph", "rb").read())
 ```
 
-The CLI passes a stray `.wav` through unchanged (with a warning), so pointing it
-at an already-decoded file is harmless.
+**Both APIs transparently use the Rust accelerator when installed** (and fall
+back to pure Python) — same bytes out either way. With `desphere[fast]`, the
+heavy kernels (shorten decode, G.711 expansion) run in Rust; pure-Python PCM is
+already C-speed. The CLI passes a stray `.wav` through unchanged (with a warning),
+so pointing it at an already-decoded file is harmless.
 
 ## Why
 

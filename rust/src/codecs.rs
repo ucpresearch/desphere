@@ -61,8 +61,8 @@ pub fn decode(h: &SphereHeader, data: &[u8]) -> Result<(u16, Vec<u8>), DecodeErr
 
     match base {
         "pcm" => decode_pcm(h, data),
-        "ulaw" | "mu-law" | "mulaw" => decode_g711(h, data, &g711::ulaw_table(), "ulaw"),
-        "alaw" | "a-law" => decode_g711(h, data, &g711::alaw_table(), "alaw"),
+        "ulaw" | "mu-law" | "mulaw" => decode_g711(h, data, false),
+        "alaw" | "a-law" => decode_g711(h, data, true),
         other => Err(DecodeError::Unsupported(format!(
             "sample_coding {other:?} not supported yet"
         ))),
@@ -86,58 +86,76 @@ fn decode_pcm(h: &SphereHeader, data: &[u8]) -> Result<(u16, Vec<u8>), DecodeErr
     Ok(((n * 8) as u16, to_little_endian(data, n, order)))
 }
 
-fn decode_g711(
-    h: &SphereHeader,
-    data: &[u8],
-    table: &[i16; 256],
-    name: &str,
-) -> Result<(u16, Vec<u8>), DecodeError> {
+/// Expand G.711 companded bytes to little-endian 16-bit PCM. The heavy kernel,
+/// shared by the codec and the Python binding (`alaw` selects a-law vs mu-law).
+pub fn g711_expand(data: &[u8], alaw: bool) -> Vec<u8> {
+    let table = if alaw {
+        g711::alaw_table()
+    } else {
+        g711::ulaw_table()
+    };
+    let mut out = Vec::with_capacity(data.len() * 2);
+    for &b in data {
+        out.extend_from_slice(&table[b as usize].to_le_bytes());
+    }
+    out
+}
+
+fn decode_g711(h: &SphereHeader, data: &[u8], alaw: bool) -> Result<(u16, Vec<u8>), DecodeError> {
     if h.sample_n_bytes()? != 1 {
+        let name = if alaw { "alaw" } else { "ulaw" };
         return Err(DecodeError::Unsupported(format!(
             "{name} expects 1-byte samples, got sample_n_bytes={}",
             h.sample_n_bytes()?
         )));
     }
-    let mut out = Vec::with_capacity(data.len() * 2);
-    for &b in data {
-        out.extend_from_slice(&table[b as usize].to_le_bytes());
-    }
-    Ok((16, out))
+    Ok((16, g711_expand(data, alaw)))
 }
 
-fn decode_shorten(h: &SphereHeader, data: &[u8]) -> Result<(u16, Vec<u8>), DecodeError> {
+/// Decode an embedded-shorten stream to little-endian 16-bit PCM, WITHOUT the
+/// header cross-checks. Returns `(channel_count, is_ulaw, pcm)`. The heavy
+/// kernel, shared by the codec and the Python binding; callers cross-check the
+/// length/channels against their header.
+pub fn shorten_to_pcm(data: &[u8]) -> Result<(usize, bool, Vec<u8>), DecodeError> {
     let (values, kind, nchan) = shorten::decode(data)?;
-    if nchan as i64 != h.channel_count()? {
-        return Err(DecodeError::Unsupported(format!(
-            "shorten channel count {nchan} disagrees with SPHERE header channel_count {}",
-            h.channel_count()?
-        )));
-    }
-    let expected = (h.sample_count()? * nchan as i64) as usize;
-    let values: Vec<i64> = if values.len() < expected {
-        return Err(DecodeError::Corrupt(format!(
-            "shorten stream decoded {} samples/channel, but the SPHERE header declares {} (truncated or QUIT came early)",
-            values.len() / nchan,
-            h.sample_count()?
-        )));
-    } else if values.len() > expected {
-        values[..expected].to_vec()
-    } else {
-        values
-    };
-
-    match kind {
+    let pcm = match kind {
         shorten::Kind::Ulaw => {
             let table = g711::ulaw_table();
             let expanded: Vec<i16> = values.iter().map(|&v| table[(v as u8) as usize]).collect();
-            Ok((16, pcm_table_to_le(&expanded)))
+            pcm_table_to_le(&expanded)
         }
         shorten::Kind::Pcm16 => {
             let clipped: Vec<i16> = values
                 .iter()
                 .map(|&v| v.clamp(-32768, 32767) as i16)
                 .collect();
-            Ok((16, pcm_table_to_le(&clipped)))
+            pcm_table_to_le(&clipped)
         }
+    };
+    Ok((nchan, kind == shorten::Kind::Ulaw, pcm))
+}
+
+fn decode_shorten(h: &SphereHeader, data: &[u8]) -> Result<(u16, Vec<u8>), DecodeError> {
+    let (nchan, _is_ulaw, pcm) = shorten_to_pcm(data)?;
+    if nchan as i64 != h.channel_count()? {
+        return Err(DecodeError::Unsupported(format!(
+            "shorten channel count {nchan} disagrees with SPHERE header channel_count {}",
+            h.channel_count()?
+        )));
     }
+    // Cross-check sample count on the emitted PCM (2 bytes/sample).
+    let expected = (h.sample_count()? * nchan as i64) as usize * 2;
+    if pcm.len() < expected {
+        return Err(DecodeError::Corrupt(format!(
+            "shorten stream decoded {} samples/channel, but the SPHERE header declares {} (truncated or QUIT came early)",
+            pcm.len() / 2 / nchan,
+            h.sample_count()?
+        )));
+    }
+    let pcm = if pcm.len() > expected {
+        pcm[..expected].to_vec()
+    } else {
+        pcm
+    };
+    Ok((16, pcm))
 }

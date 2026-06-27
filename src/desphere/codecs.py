@@ -16,8 +16,22 @@ import struct
 from typing import Tuple
 
 from . import g711, shorten
-from .errors import SphereHeaderError, UnsupportedCoding, UnsupportedFormat
+from .errors import (
+    DesphereError,
+    SphereHeaderError,
+    UnsupportedCoding,
+    UnsupportedFormat,
+)
 from .sphere import SphereHeader
+
+# Optional Rust accelerator. Only the heavy numeric kernels (shorten decode and
+# G.711 expansion) are delegated; the typed validation/error checks stay here, so
+# behavior is identical with or without it. PCM byte-reorder stays pure (the
+# strided slice is already C-speed). pip install desphere[fast] to enable.
+try:
+    import desphere_native as _native
+except ImportError:  # pragma: no cover - native is optional
+    _native = None
 
 # Map NIST sample_byte_format -> endianness of the stored samples.
 #   "01" = low byte first  (little-endian)
@@ -87,6 +101,8 @@ class _G711Codec:
                 f"{cls.name} expects 1-byte samples, got "
                 f"sample_n_bytes={header.sample_n_bytes}"
             )
+        if _native is not None:
+            return 16, bytes(_native.g711_expand(bytes(data), cls.name == "alaw"))
         return 16, g711.expand(data, cls.table)
 
 
@@ -112,6 +128,29 @@ class ShortenCodec:
 
     @classmethod
     def decode(cls, header: SphereHeader, data: bytes) -> Tuple[int, bytes]:
+        if _native is not None:
+            # Native does the heavy decode+expand and returns PCM bytes; we keep
+            # the same typed header cross-checks (on the emitted PCM, 2 B/sample).
+            try:
+                nchan, _is_ulaw, pcm = _native.shorten_to_pcm(bytes(data))
+            except ValueError as exc:
+                raise DesphereError(str(exc)) from exc
+            pcm = bytes(pcm)
+            if nchan != header.channel_count:
+                raise UnsupportedFormat(
+                    f"shorten channel count {nchan} disagrees with SPHERE header "
+                    f"channel_count {header.channel_count}"
+                )
+            expected = header.sample_count * nchan  # in samples
+            got = len(pcm) // 2
+            if got < expected:
+                raise SphereHeaderError(
+                    f"shorten stream decoded {got // nchan} samples/channel, "
+                    f"but the SPHERE header declares {header.sample_count} "
+                    "(stream truncated or QUIT came early)"
+                )
+            return 16, (pcm[: expected * 2] if got > expected else pcm)
+
         values, kind, nchan = shorten.decode(data)
         if nchan != header.channel_count:
             raise UnsupportedFormat(

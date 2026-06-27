@@ -25,9 +25,11 @@ MIT-licensed (see `PROVENANCE.md`).
 
 ### Packaging
 - Python package `desphere` with the `sph2wav` CLI (pure Python, zero deps). The
-  `transcode_bytes` one-shot API and the CLI transparently use the optional Rust
-  accelerator when installed (`pip install desphere[fast]` → `desphere-native`)
-  and fall back to pure Python otherwise — same bytes either way.
+  whole decode path — the streaming `transcode()`, the one-shot `transcode_bytes()`,
+  and the CLI — transparently uses the optional Rust accelerator when installed
+  (`pip install desphere[fast]` → `desphere-native`) and falls back to pure Python
+  otherwise — same bytes either way. The accelerator delegates the heavy kernels
+  (shorten decode, G.711 expansion); typed error checks stay in Python.
 - Rust crate `desphere` (dependency-free core); Rust clients (e.g. praatfan)
   import it via a path/git dependency.
 - WASM bindings via `wasm-bindgen` (opt-in `wasm` feature) + a self-contained

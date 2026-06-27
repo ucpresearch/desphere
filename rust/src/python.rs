@@ -29,10 +29,33 @@ fn decode_pcm<'py>(py: Python<'py>, sph: &[u8]) -> PyResult<Bound<'py, PyBytes>>
     Ok(PyBytes::new(py, &pcm))
 }
 
+/// Codec-level kernels, so the Python streaming API accelerates too. These do
+/// the heavy number-crunching only and return PCM bytes; the Python codecs keep
+/// their (typed) header cross-checks around these.
+
+/// Decode an embedded-shorten stream to LE 16-bit PCM (no header cross-checks).
+/// Returns `(channel_count, is_ulaw, pcm_bytes)`.
+#[pyfunction]
+fn shorten_to_pcm<'py>(
+    py: Python<'py>,
+    stream: &[u8],
+) -> PyResult<(usize, bool, Bound<'py, PyBytes>)> {
+    let (nchan, is_ulaw, pcm) = crate::codecs::shorten_to_pcm(stream).map_err(to_py)?;
+    Ok((nchan, is_ulaw, PyBytes::new(py, &pcm)))
+}
+
+/// Expand G.711 companded bytes to LE 16-bit PCM (`alaw` = a-law, else mu-law).
+#[pyfunction]
+fn g711_expand<'py>(py: Python<'py>, data: &[u8], alaw: bool) -> PyResult<Bound<'py, PyBytes>> {
+    Ok(PyBytes::new(py, &crate::codecs::g711_expand(data, alaw)))
+}
+
 #[pymodule]
 fn desphere_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(wrap_pyfunction!(transcode, m)?)?;
     m.add_function(wrap_pyfunction!(decode_pcm, m)?)?;
+    m.add_function(wrap_pyfunction!(shorten_to_pcm, m)?)?;
+    m.add_function(wrap_pyfunction!(g711_expand, m)?)?;
     Ok(())
 }
