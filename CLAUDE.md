@@ -106,7 +106,8 @@ Adding a coding = registering a decoder. Until then the gate raises a precise
 | `pcm` multi-channel (interleaved) | ✅ supported |
 | `pcm` 8-bit / 24-bit | ⛔ `UnsupportedFormat` (conventions unvalidated) |
 | `ulaw` / `alaw` (G.711, 8-bit) | ✅ supported (Phase B) |
-| `pcm,embedded-shorten-v2.00` | ⛔ `UnsupportedCoding` — **Phase C, next** |
+| `pcm,embedded-shorten-v2.00` (16-bit) | ✅ supported (Phase C) — byte-exact vs ffmpeg, mono & stereo |
+| `ulaw,embedded-shorten` (shorten type 8) / QLPC | ⛔ `UnsupportedFormat` — future work |
 
 ---
 
@@ -150,5 +151,17 @@ Use `uv pip`, never bare `pip`.
 
 - **Phase A** ✅ — SPHERE header + 16/32-bit PCM, lossless.
 - **Phase B** ✅ — μ-law / a-law (ITU-T G.711).
-- **Phase C** ⬜ — embedded shorten, from TR.156 + ffmpeg oracle on real corpus
-  files. The hard one: Rice/Golomb coding, polynomial predictors, QLPC.
+- **Phase C** ✅ — embedded-shorten (16-bit PCM) from TR.156 + ffmpeg oracle,
+  byte-exact on real sph2pipe corpus files (mono & stereo). `src/mercator/shorten.py`.
+  Remaining: shorten lossless-μ-law (type 8) + QLPC blocks.
+
+### Shorten decode notes (hard-won, validated vs ffmpeg)
+
+- Bit order MSB-first. `uvar(k)` = unary(0s→1) high part + k low bits.
+  `ulong` = `uvar(uvar(2))`. `var(k)` = `uvar(k)` then zig-zag to signed.
+- Per DIFF block: `energy = uvar(3)`; **residual Rice parameter `k = energy+1`**.
+- DIFF0 adds a running-mean offset; DIFF1/2/3 use polynomial history (carried
+  across blocks). The exact mean (all divisions **C-truncate toward zero**):
+  per-block `mean = (sum + blocksize/2) / blocksize`;
+  `offset = (Σ last nmean means + nmean/2) / nmean`. The per-block `+blocksize/2`
+  rounding bias is essential — without it, channels with negative DC drift by 1.

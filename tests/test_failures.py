@@ -27,9 +27,13 @@ def test_8bit_pcm_rejected(make_sphere):
         _transcode(path)
 
 
-def test_shorten_coding_rejected(make_sphere):
+def test_malformed_shorten_rejected(make_sphere):
+    # PCM-embedded-shorten is supported, but a shorten tag over a non-shorten
+    # body (no 'ajkg' magic) must fail loudly, not emit garbage.
+    from mercator.errors import MercatorError
+
     path, _ = make_sphere(sample_coding="pcm,embedded-shorten-v2.00")
-    with pytest.raises(UnsupportedCoding, match="shorten"):
+    with pytest.raises(MercatorError, match="ajkg"):
         _transcode(path)
 
 

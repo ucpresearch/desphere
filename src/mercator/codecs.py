@@ -12,9 +12,10 @@ decoder; until then the gate raises a precise error.
 
 from __future__ import annotations
 
+import struct
 from typing import Tuple
 
-from . import g711
+from . import g711, shorten
 from .errors import UnsupportedCoding, UnsupportedFormat
 from .sphere import SphereHeader
 
@@ -99,8 +100,31 @@ class AlawCodec(_G711Codec):
     table = g711.ALAW_TABLE
 
 
+class ShortenCodec:
+    """Embedded-shorten (v2) lossless decompression to little-endian PCM.
+
+    Only the PCM (16-bit) shorten sample types are supported; the lossless
+    mu-law mode and QLPC blocks raise a precise error (see ``shorten``).
+    """
+
+    name = "embedded-shorten-v2.00"
+
+    @classmethod
+    def decode(cls, header: SphereHeader, data: bytes) -> Tuple[int, bytes]:
+        samples, bits, nchan = shorten.decode(data)
+        if nchan != header.channel_count:
+            raise UnsupportedFormat(
+                f"shorten channel count {nchan} disagrees with SPHERE header "
+                f"channel_count {header.channel_count}"
+            )
+        lo, hi = -(1 << (bits - 1)), (1 << (bits - 1)) - 1
+        clipped = [lo if v < lo else hi if v > hi else v for v in samples]
+        fmt = "<%d%s" % (len(clipped), "h" if bits == 16 else "i")
+        return bits, struct.pack(fmt, *clipped)
+
+
 # Registry of base codings we can decode. Compression tokens are gated
-# separately (none registered yet) so shorten et al. fail with a clear message.
+# separately so unsupported compressions fail with a clear message.
 # Aliases cover the spellings different encoders write into the header.
 _BASE_CODECS = {
     "pcm": PcmCodec,
@@ -110,7 +134,9 @@ _BASE_CODECS = {
     "alaw": AlawCodec,
     "a-law": AlawCodec,
 }
-_COMPRESSORS: dict = {}  # e.g. "embedded-shorten-v2.00" -> decoder (future)
+_COMPRESSORS = {
+    "embedded-shorten-v2.00": ShortenCodec,
+}
 
 
 def resolve_codec(header: SphereHeader):

@@ -56,7 +56,9 @@ loudly on anything not yet validated** — never emit a plausible-but-wrong WAV.
 | `pcm`, multi-channel (interleaved)  | ✅ supported (validate against an oracle for exotic files) |
 | `pcm`, 8-bit / 24-bit               | ⛔ rejected (`UnsupportedFormat`) — sign/packing not yet validated |
 | `ulaw` / `alaw` (G.711, 8-bit)      | ✅ supported (Phase B) — verified byte-exact vs ffmpeg on all 256 codes |
-| `pcm,embedded-shorten-v2.00`        | ⛔ rejected (`UnsupportedCoding`) — **Phase C** |
+| `pcm,embedded-shorten-v2.00` (16-bit) | ✅ supported (Phase C) — byte-exact vs ffmpeg, mono & stereo |
+| `ulaw,embedded-shorten` (shorten type 8) | ⛔ rejected (`UnsupportedFormat`) — lossless-μ-law shorten mode, future work |
+| shorten QLPC blocks                 | ⛔ rejected (`UnsupportedFormat`) — LPC-predicted blocks, future work |
 
 Adding a coding means registering a decoder in `mercator/codecs.py`; until then
 the gate raises a precise error.
@@ -89,5 +91,7 @@ pytest
 
 - **Phase A** (done): SPHERE header + 16/32-bit PCM, lossless.
 - **Phase B** (done): μ-law / a-law decode (ITU-T G.711).
-- **Phase C**: embedded shorten decode (from TR.156 + black-box oracle), the
-  big one — validated byte-for-byte on real corpus `.sph` files.
+- **Phase C** (done): embedded-shorten decode of 16-bit PCM (from TR.156 +
+  black-box ffmpeg oracle) — validated byte-for-byte on real corpus `.sph`
+  files, mono and stereo. Remaining: shorten's lossless-μ-law mode (type 8) and
+  QLPC blocks.

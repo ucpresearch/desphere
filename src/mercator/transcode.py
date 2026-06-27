@@ -21,15 +21,19 @@ def transcode(header: SphereHeader, data: bytes, out) -> None:
     trailing bytes beyond the declared sample count (padding, seek tables) are
     ignored for PCM.
     """
-    expected = header.expected_data_bytes
-    if len(data) < expected:
-        raise SphereHeaderError(
-            f"audio payload truncated: header declares {expected} bytes "
-            f"({header.sample_count} samples x {header.channel_count} ch x "
-            f"{header.sample_n_bytes} byte), but only {len(data)} bytes present"
-        )
-    if len(data) > expected:
-        data = data[:expected]
+    # Compressed codings (e.g. embedded-shorten) carry a bitstream whose length
+    # is unrelated to the uncompressed sample count, so only length-check raw PCM.
+    compressed = "," in header.sample_coding
+    if not compressed:
+        expected = header.expected_data_bytes
+        if len(data) < expected:
+            raise SphereHeaderError(
+                f"audio payload truncated: header declares {expected} bytes "
+                f"({header.sample_count} samples x {header.channel_count} ch x "
+                f"{header.sample_n_bytes} byte), but only {len(data)} bytes present"
+            )
+        if len(data) > expected:
+            data = data[:expected]
 
     codec = resolve_codec(header)
     bits_per_sample, pcm = codec.decode(header, data)

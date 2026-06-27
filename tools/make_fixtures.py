@@ -117,8 +117,8 @@ def make_unsupported_zoo(manifest):
     with open(os.path.join(FIXTURES, "shorten_gate.sph"), "wb") as f:
         f.write(header)
         f.write(body)
-    manifest["shorten_gate.sph"] = {"kind": "unsupported_coding"}
-    print("  wrote shorten_gate.sph (expected: UnsupportedCoding)")
+    manifest["shorten_gate.sph"] = {"kind": "malformed_shorten"}
+    print("  wrote shorten_gate.sph (expected: MercatorError — no 'ajkg' magic)")
 
 
 def make_g711_zoo(manifest):
