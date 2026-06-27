@@ -13,8 +13,19 @@ repository = "https://github.com/ucpresearch/desphere"
 [lib]
 name = "desphere"
 path = "src/lib.rs"
+# rlib so formantwise-pipe can import it as a Rust crate; cdylib for the wasm
+# and python (pyo3) targets.
+crate-type = ["rlib", "cdylib"]
+
+[features]
+# The core library is dependency-free. Bindings are opt-in features so they
+# never burden a plain Rust dependant.
+wasm = ["dep:wasm-bindgen"]
+python = ["dep:pyo3"]
 
 [dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+pyo3 = { version = "0.23", optional = true, features = ["extension-module"] }
 
 # Test-only: parse the shared fixture manifest. The library itself stays
 # dependency-free; this does not affect downstream crates.

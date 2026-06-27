@@ -25,6 +25,12 @@ pub mod sphere;
 pub mod transcode;
 pub mod wav;
 
+#[cfg(feature = "wasm")]
+pub mod wasm;
+
+#[cfg(feature = "python")]
+pub mod python;
+
 pub use error::DecodeError;
 pub use shorten::{decode as decode_shorten, Kind};
 pub use sphere::SphereHeader;
