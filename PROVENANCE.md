@@ -26,7 +26,11 @@ not create a derivative work of those binaries.
   compression_, CUED/F-INFENG/TR.156** — the published academic report describing
   the shorten algorithm (Rice/uvar coding, polynomial vs LPC prediction). A copy
   was read; it describes the *algorithm*, not anyone's source code. Used for the
-  shorten decoder design.
+  shorten decoder: `shorten.py` / `rust/src/shorten.rs` (block loop, DIFF/QLPC
+  prediction, type-8 mu-law) and the bit primitives in `rust/src/bitreader.rs`
+  (`uvar`/`ulong`/`var`). The non-obvious details (the `k=energy+1` Rice quirk,
+  the type-8 bitshift remap, QLPC fixed-point) were recovered from oracle OUTPUT,
+  not from any decoder source — see below.
 - **Microsoft/IBM RIFF/WAVE** — the public container spec. Used for `wav.py` /
   `rust/src/wav.rs`.
 - **Black-box oracle testing** — `ffmpeg`, `sox`, `sph2pipe`, NIST `w_decode`, and
@@ -41,9 +45,11 @@ not create a derivative work of those binaries.
 
 The `shorten` **encoder** (Tony Robinson's `drtonyr/shorten`, a non-FOSS license)
 was *downloaded and compiled* to generate test fixtures and act as a second
-black-box oracle (`oracles/build_shorten.sh`). Its `.c/.h` source was **never
-opened**; the build needed only a modern-stdarg shim written from scratch. The
-build script documents this. Compiling ≠ reading source.
+black-box oracle. Its `.c/.h` source was **never opened**; the build needed only
+a modern-stdarg shim written from scratch. The build scripts
+`oracles/build_shorten.sh` and `oracles/build_w_decode.sh` are committed (text,
+ours) as evidence; the binaries they produce are gitignored (license-restricted).
+Compiling ≠ reading source.
 
 ## How the hard parts were derived (reverse-engineering, from oracle output only)
 

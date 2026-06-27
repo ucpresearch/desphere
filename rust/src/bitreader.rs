@@ -2,6 +2,11 @@
 //! `_BitReader`. EOF returns `Err` (never a panic — important for WASM), and
 //! field widths / unary run lengths are capped so corrupt input fails loud
 //! instead of overflowing or spinning (see ../../docs/RUST_PORT.md).
+//!
+//! CLEAN-ROOM: translated from desphere's own MIT Python (the `uvar`/`ulong`/
+//! `var` primitives are from the public TR.156 description, validated by
+//! black-box oracle output). No GPL/LGPL source was ever read; see
+//! ../../PROVENANCE.md.
 
 use crate::error::DecodeError;
 
@@ -18,7 +23,11 @@ pub struct BitReader<'a> {
 
 impl<'a> BitReader<'a> {
     pub fn new(data: &'a [u8], start: usize) -> Self {
-        BitReader { data, pos: start, bit: 0 }
+        BitReader {
+            data,
+            pos: start,
+            bit: 0,
+        }
     }
 
     #[inline]
@@ -37,7 +46,9 @@ impl<'a> BitReader<'a> {
 
     pub fn get_bits(&mut self, n: u32) -> Result<u64, DecodeError> {
         if n > MAX_WIDTH {
-            return Err(DecodeError::Corrupt(format!("oversized bit field width {n}")));
+            return Err(DecodeError::Corrupt(format!(
+                "oversized bit field width {n}"
+            )));
         }
         let mut v: u64 = 0;
         for _ in 0..n {

@@ -1,5 +1,10 @@
 //! Embedded-shorten (v2) decoder — Rust twin of `src/desphere/shorten.py`.
 //!
+//! CLEAN-ROOM: translated solely from desphere's own MIT Python (itself built
+//! from the public Robinson 1994 TR.156 algorithm description + black-box oracle
+//! testing). No GPL/LGPL decoder source — FFmpeg, the original `shorten` C
+//! sources, or `sph2pipe` — was ever read. See ../../PROVENANCE.md.
+//!
 //! This must reproduce the Python reference bit-for-bit; it is validated against
 //! the same committed fixtures (`tests/fixtures/*.shn`). Integer-width and shift
 //! semantics follow ../../docs/RUST_PORT.md: i32 for per-sample state, **i64 for
@@ -121,7 +126,11 @@ fn ulaw_value_to_byte(v: i64, bitshift: u32) -> Result<u8, DecodeError> {
                 "shorten type-8 reconstructed value {v} is outside the 8-bit mu-law domain"
             )));
         }
-        return Ok(if v >= 0 { (255 - v) as u8 } else { ((128 + v) & 0xFF) as u8 });
+        return Ok(if v >= 0 {
+            (255 - v) as u8
+        } else {
+            ((128 + v) & 0xFF) as u8
+        });
     }
     let (sign, c) = if v >= 0 { (0i64, v) } else { (1i64, -v - 1) };
     let mut c = shift_code(c, bitshift);
@@ -129,7 +138,11 @@ fn ulaw_value_to_byte(v: i64, bitshift: u32) -> Result<u8, DecodeError> {
         c = 127; // saturate to the loudest magnitude code
     }
     let rank = if sign == 0 { c } else { -(c + 1) };
-    Ok(if rank >= 0 { (255 - rank) as u8 } else { ((rank + 128) & 0xFF) as u8 })
+    Ok(if rank >= 0 {
+        (255 - rank) as u8
+    } else {
+        ((rank + 128) & 0xFF) as u8
+    })
 }
 
 /// Decode an embedded-shorten stream (`data` starts at the `ajkg` magic).
@@ -173,16 +186,24 @@ pub fn decode(data: &[u8]) -> Result<(Vec<i64>, Kind, usize), DecodeError> {
         )));
     }
     if !(1..=MAX_NCHAN).contains(&nchan) {
-        return Err(DecodeError::Corrupt(format!("invalid shorten channel count {nchan}")));
+        return Err(DecodeError::Corrupt(format!(
+            "invalid shorten channel count {nchan}"
+        )));
     }
     if !(1..=MAX_BLOCKSIZE).contains(&blocksize0) {
-        return Err(DecodeError::Corrupt(format!("invalid shorten blocksize {blocksize0}")));
+        return Err(DecodeError::Corrupt(format!(
+            "invalid shorten blocksize {blocksize0}"
+        )));
     }
     if maxnlpc > MAX_MAXNLPC {
-        return Err(DecodeError::Unsupported(format!("implausible maxnlpc {maxnlpc}")));
+        return Err(DecodeError::Unsupported(format!(
+            "implausible maxnlpc {maxnlpc}"
+        )));
     }
     if nmean > MAX_NMEAN {
-        return Err(DecodeError::Unsupported(format!("implausible nmean {nmean}")));
+        return Err(DecodeError::Unsupported(format!(
+            "implausible nmean {nmean}"
+        )));
     }
 
     let nchan = nchan as usize;
@@ -206,7 +227,9 @@ pub fn decode(data: &[u8]) -> Result<(Vec<i64>, Kind, usize), DecodeError> {
         if fnc == FN_BLOCKSIZE {
             let b = br.ulong()?;
             if !(1..=MAX_BLOCKSIZE).contains(&b) {
-                return Err(DecodeError::Corrupt(format!("invalid shorten blocksize {b}")));
+                return Err(DecodeError::Corrupt(format!(
+                    "invalid shorten blocksize {b}"
+                )));
             }
             blocksize = b as usize;
             continue;
@@ -259,7 +282,8 @@ pub fn decode(data: &[u8]) -> Result<(Vec<i64>, Kind, usize), DecodeError> {
                         let term = c.checked_mul(d).ok_or_else(overflow)?;
                         dot = dot.checked_add(term).ok_or_else(overflow)?;
                     }
-                    let pred = dot.checked_add(1i64 << LPC_QUANT).ok_or_else(overflow)? >> LPC_QUANT;
+                    let pred =
+                        dot.checked_add(1i64 << LPC_QUANT).ok_or_else(overflow)? >> LPC_QUANT;
                     r.checked_add(pred)
                         .and_then(|x| x.checked_add(off))
                         .ok_or_else(overflow)?
@@ -273,10 +297,17 @@ pub fn decode(data: &[u8]) -> Result<(Vec<i64>, Kind, usize), DecodeError> {
         } else if fnc <= 3 {
             // DIFF0..3
             let k = br.uvar(ENERGYSIZE)? as u32 + 1;
-            let off = if fnc == 0 { coffset(&means[ch], nmean)? } else { 0 };
+            let off = if fnc == 0 {
+                coffset(&means[ch], nmean)?
+            } else {
+                0
+            };
             let hist = &chan_hist[ch];
-            let (mut p1, mut p2, mut p3) =
-                (hist[hist.len() - 1], hist[hist.len() - 2], hist[hist.len() - 3]);
+            let (mut p1, mut p2, mut p3) = (
+                hist[hist.len() - 1],
+                hist[hist.len() - 2],
+                hist[hist.len() - 3],
+            );
             let mut blk = Vec::with_capacity(blocksize);
             for _ in 0..blocksize {
                 let r = br.var(k)?;
@@ -303,7 +334,9 @@ pub fn decode(data: &[u8]) -> Result<(Vec<i64>, Kind, usize), DecodeError> {
             }
             blk
         } else {
-            return Err(DecodeError::Corrupt(format!("unknown shorten function code {fnc}")));
+            return Err(DecodeError::Corrupt(format!(
+                "unknown shorten function code {fnc}"
+            )));
         };
 
         // History & running mean stay in the pre-shift domain.
@@ -329,9 +362,12 @@ pub fn decode(data: &[u8]) -> Result<(Vec<i64>, Kind, usize), DecodeError> {
         }
 
         // Bound total output so a non-terminating stream can't OOM (WASM abort).
-        total = total.checked_add(blk.len()).filter(|&t| t <= MAX_TOTAL_SAMPLES).ok_or_else(|| {
-            DecodeError::Corrupt("shorten stream exceeds the maximum decoded length".into())
-        })?;
+        total = total
+            .checked_add(blk.len())
+            .filter(|&t| t <= MAX_TOTAL_SAMPLES)
+            .ok_or_else(|| {
+                DecodeError::Corrupt("shorten stream exceeds the maximum decoded length".into())
+            })?;
 
         // Emit, applying bitshift per sample type.
         if is_ulaw {
