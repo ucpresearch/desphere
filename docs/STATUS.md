@@ -108,15 +108,17 @@ VIRTUAL_ENV=$HOME/local/scr/venvs/desphere uv pip install -e ".[dev]"
 - **Now → Python.** Develop and debug in Python (this repo). Keep the Python
   implementation as the readable reference and for most use — it stays.
 - **Next (optional, low priority):** 8/24-bit linear PCM (see above).
-- **Rust port — IN PROGRESS** in `rust/` (crate `desphere`, mirrors
-  `praatfan-core-clean`'s layout). The full decode pipeline is ported and
-  validated byte-for-byte: SPHERE header parser, capability gate (PCM 16/32,
-  G.711 mu-law/a-law, embedded-shorten incl. QLPC + type-8 bitshift), WAV writer,
-  end-to-end `transcode`. `cargo test` passes against the **same** committed
-  fixtures + manifest as Python, and `examples/sph2wav` output is byte-identical
-  to the Python `sph2wav` on the PCM zoo, G.711, and a SPHERE-wrapped shorten
-  file. Remaining: pyo3 bindings (for `formantwise-pipe` to import) and
-  wasm-bindgen. Guide: `docs/RUST_PORT.md`.
+- **Rust port — COMPLETE & release-ready (v0.1.0)** in `rust/` (crate `desphere`,
+  mirrors `praatfan-core-clean`'s layout). Full pipeline ported and byte-for-byte
+  identical to Python: SPHERE header, capability gate (PCM 16/32, G.711, shorten
+  incl. QLPC + type-8 bitshift), WAV writer, `transcode`, plus **wasm-bindgen**
+  (`wasm` feature, validated in node) and **pyo3** (`python` feature → module
+  `desphere_native`, built with maturin) bindings — both byte-identical to the
+  Python. A multi-agent Rust review was applied: checked arithmetic / saturating
+  shifts so corrupt input fails loud and the decoder never panics (WASM-safe),
+  plus metadata/CI/CHANGELOG. `cargo test`/clippy(-D warnings)/fmt clean on the
+  default and wasm32 targets; `cargo publish --dry-run` packages cleanly. Guide:
+  `docs/RUST_PORT.md`; clean-room record: `PROVENANCE.md`.
 - **Eventually → Rust** (for `formantwise-pipe` / WASM, and for speed), mirroring
   `praatfan-core-clean`'s Python-first-then-Rust approach. The Python decoder is
   the spec the Rust port validates against; both check against the same oracle
