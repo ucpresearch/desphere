@@ -29,13 +29,14 @@ from .errors import SphereHeaderError
 MAGIC = b"NIST_1A"
 _DEFAULT_HEADER_SIZE = 1024
 
-# Fields we require to interpret the audio payload.
+# Fields we require to interpret the audio payload. Note: sample_coding is NOT
+# required — real corpora (e.g. classic TIMIT) omit it, and it defaults to
+# "pcm" per the NIST convention (see SphereHeader.sample_coding).
 _REQUIRED = (
     "sample_count",
     "sample_rate",
     "channel_count",
     "sample_n_bytes",
-    "sample_coding",
 )
 
 

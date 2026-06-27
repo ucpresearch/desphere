@@ -29,6 +29,17 @@ def test_byte_format_default_for_single_byte():
     assert header.sample_byte_format == "1"
 
 
+def test_sample_coding_defaults_to_pcm():
+    # Real corpora (classic TIMIT) omit sample_coding entirely; it defaults to
+    # pcm and the file must still parse and transcode.
+    blob = _header(
+        "sample_count -i 4\nsample_rate -i 16000\nchannel_count -i 1\n"
+        "sample_n_bytes -i 2\nsample_byte_format -s2 01"
+    )
+    header = SphereHeader.parse(blob)
+    assert header.sample_coding == "pcm"
+
+
 def test_missing_magic_raises():
     with pytest.raises(SphereHeaderError, match="NIST_1A"):
         SphereHeader.parse(b"RIFF....not a sphere")
