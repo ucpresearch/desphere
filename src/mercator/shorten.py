@@ -42,11 +42,23 @@ _FN_DIFF0, _FN_DIFF1, _FN_DIFF2, _FN_DIFF3 = 0, 1, 2, 3
 _FN_QUIT, _FN_BLOCKSIZE, _FN_BITSHIFT = 4, 5, 6
 _FN_QLPC, _FN_ZERO, _FN_VERBATIM = 7, 8, 9
 
-# Sample types we support (16-bit; HL = stored big-endian, LH = little-endian —
-# both decode to the same integer samples, which we emit as little-endian WAV).
+# Sample types. 16-bit PCM: HL = stored big-endian, LH = little-endian — both
+# decode to the same integer samples, emitted as little-endian WAV. ULAW
+# (type 8) is shorten's lossless mu-law mode: the reconstructed values live in a
+# monotonic "sorted-code" domain and map back to mu-law bytes (see _val_to_ulaw).
 _TYPE_S16HL = 3
 _TYPE_S16LH = 5
-_SUPPORTED_FTYPES = (_TYPE_S16HL, _TYPE_S16LH)
+_TYPE_ULAW = 8
+_SUPPORTED_FTYPES = (_TYPE_S16HL, _TYPE_S16LH, _TYPE_ULAW)
+
+
+def _val_to_ulaw(v: int) -> int:
+    """Map a shorten type-8 reconstructed value to its mu-law byte (0..255).
+
+    Derived by black-box comparison against NIST ``w_decode`` output:
+    v in [-128,127] maps bijectively onto mu-law [0,255].
+    """
+    return (255 - v) if v >= 0 else (128 + v) & 0xFF
 
 _MAGIC = b"ajkg"
 _NWRAP = 3  # history samples needed for DIFF3
@@ -96,11 +108,13 @@ class _BitReader:
         return (u >> 1) if (u & 1) == 0 else ~(u >> 1)
 
 
-def decode(data: bytes) -> Tuple[List[int], int, int]:
+def decode(data: bytes) -> Tuple[List[int], str, int]:
     """Decode an embedded-shorten stream.
 
     ``data`` is the bytes following the SPHERE header. Returns
-    ``(interleaved_samples, bits_per_sample, channel_count)``.
+    ``(interleaved_values, kind, channel_count)`` where ``kind`` is ``"pcm16"``
+    (values are signed 16-bit samples) or ``"ulaw"`` (values are mu-law bytes
+    0..255, to be expanded via G.711).
     """
     if data[:4] != _MAGIC:
         raise MercatorError("not a shorten stream (missing 'ajkg' magic)")
@@ -122,8 +136,7 @@ def decode(data: bytes) -> Tuple[List[int], int, int]:
     if ftype not in _SUPPORTED_FTYPES:
         raise UnsupportedFormat(
             f"shorten sample type {ftype} not supported yet "
-            f"(supported: 16-bit PCM types {_SUPPORTED_FTYPES}; "
-            "e.g. type 8 = lossless mu-law, not yet implemented)"
+            f"(supported: {_SUPPORTED_FTYPES} = 16-bit PCM and lossless mu-law)"
         )
 
     chan_out: List[List[int]] = [[] for _ in range(nchan)]
@@ -148,6 +161,14 @@ def decode(data: bytes) -> Tuple[List[int], int, int]:
             continue
         if fn == _FN_BITSHIFT:
             bitshift = br.uvar(_BITSHIFTSIZE)
+            if bitshift and ftype == _TYPE_ULAW:
+                # bitshift interacting with the 8-bit mu-law domain is a code
+                # path we cannot validate: the only oracle (NIST w_decode)
+                # corrupts memory on the large real-speech files that use it.
+                raise UnsupportedFormat(
+                    "shorten lossless mu-law (type 8) with bitshift is not yet "
+                    "validated (no working decode oracle for this case)"
+                )
             continue
         if fn == _FN_VERBATIM:
             n = br.uvar(_VERBATIM_CKSIZE)
@@ -196,4 +217,15 @@ def decode(data: bytes) -> Tuple[List[int], int, int]:
     for i in range(n):
         for c in chan_out:
             interleaved.append(c[i])
-    return interleaved, 16, nchan
+
+    if ftype == _TYPE_ULAW:
+        out = []
+        for v in interleaved:
+            if not -128 <= v <= 127:
+                raise UnsupportedFormat(
+                    f"shorten type-8 reconstructed value {v} is outside the "
+                    "8-bit mu-law domain — an unvalidated code path"
+                )
+            out.append(_val_to_ulaw(v))
+        return out, "ulaw", nchan
+    return interleaved, "pcm16", nchan

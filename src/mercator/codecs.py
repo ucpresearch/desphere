@@ -103,24 +103,26 @@ class AlawCodec(_G711Codec):
 class ShortenCodec:
     """Embedded-shorten (v2) lossless decompression to little-endian PCM.
 
-    Only the PCM (16-bit) shorten sample types are supported; the lossless
-    mu-law mode and QLPC blocks raise a precise error (see ``shorten``).
+    Handles 16-bit PCM shorten types and the lossless mu-law mode (type 8,
+    expanded to 16-bit PCM via G.711). QLPC blocks raise a precise error.
     """
 
     name = "embedded-shorten-v2.00"
 
     @classmethod
     def decode(cls, header: SphereHeader, data: bytes) -> Tuple[int, bytes]:
-        samples, bits, nchan = shorten.decode(data)
+        values, kind, nchan = shorten.decode(data)
         if nchan != header.channel_count:
             raise UnsupportedFormat(
                 f"shorten channel count {nchan} disagrees with SPHERE header "
                 f"channel_count {header.channel_count}"
             )
-        lo, hi = -(1 << (bits - 1)), (1 << (bits - 1)) - 1
-        clipped = [lo if v < lo else hi if v > hi else v for v in samples]
-        fmt = "<%d%s" % (len(clipped), "h" if bits == 16 else "i")
-        return bits, struct.pack(fmt, *clipped)
+        if kind == "ulaw":
+            return 16, g711.expand(bytes(values), g711.ULAW_TABLE)
+        # kind == "pcm16": signed 16-bit little-endian
+        lo, hi = -32768, 32767
+        clipped = [lo if v < lo else hi if v > hi else v for v in values]
+        return 16, struct.pack("<%dh" % len(clipped), *clipped)
 
 
 # Registry of base codings we can decode. Compression tokens are gated
