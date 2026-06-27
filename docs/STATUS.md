@@ -109,8 +109,9 @@ VIRTUAL_ENV=$HOME/local/scr/venvs/desphere uv pip install -e ".[dev]"
   accel** — `pip install desphere` (pure, zero-dep, the spec); `desphere[fast]`
   adds the Rust `desphere-native` wheel, which `transcode_bytes`/the CLI use
   transparently (fallback to pure Python otherwise).
-- **No crates.io / npm**: `formantwise-core` (Rust) and `ozen-web` (WASM) live in
-  the same `ucpresearch` org and consume `rust/` via path/git deps directly.
+- **No crates.io / npm**: the Rust client and a WASM web app live in the same
+  `ucpresearch` org and consume `rust/` via path/git deps directly (praatfan is a
+  likely consumer).
 - **Web page**: `web/index.html` — client-side `sph2wav` (WASM), deployed to
   GitHub Pages by `.github/workflows/pages.yml`. Nothing uploaded.
 - **CLI + web** pass a stray RIFF/WAV through unchanged (with a warning); the
@@ -132,7 +133,7 @@ VIRTUAL_ENV=$HOME/local/scr/venvs/desphere uv pip install -e ".[dev]"
   plus metadata/CI/CHANGELOG. `cargo test`/clippy(-D warnings)/fmt clean on the
   default and wasm32 targets; `cargo publish --dry-run` packages cleanly. Guide:
   `docs/RUST_PORT.md`; clean-room record: `PROVENANCE.md`.
-- **Eventually → Rust** (for `formantwise-pipe` / WASM, and for speed), mirroring
+- **Eventually → Rust** (for a Rust client / WASM, and for speed), mirroring
   `praatfan-core-clean`'s Python-first-then-Rust approach. The Python decoder is
   the spec the Rust port validates against; both check against the same oracle
   outputs / committed fixtures. Rust also fixes the perf gap (the pure-Python

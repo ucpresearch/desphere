@@ -28,8 +28,8 @@ MIT-licensed (see `PROVENANCE.md`).
   `transcode_bytes` one-shot API and the CLI transparently use the optional Rust
   accelerator when installed (`pip install desphere[fast]` → `desphere-native`)
   and fall back to pure Python otherwise — same bytes either way.
-- Rust crate `desphere` (dependency-free core); `formantwise-core` imports it via
-  a path/git dependency.
+- Rust crate `desphere` (dependency-free core); Rust clients (e.g. praatfan)
+  import it via a path/git dependency.
 - WASM bindings via `wasm-bindgen` (opt-in `wasm` feature) + a self-contained
   client-side `sph2wav` web page (`web/`, deployed to GitHub Pages) — converts in
   the browser, nothing uploaded.

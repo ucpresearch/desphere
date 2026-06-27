@@ -96,8 +96,9 @@ The Python in `src/desphere` is the reference **spec**; [`rust/`](rust/) is a
 Rust port that reproduces it **bit-for-bit** (same fixtures), for speed and for
 the web. It builds three ways from one crate:
 
-- a **Rust library** — `formantwise-core` imports it via a path/git dependency;
-- **WASM** (`wasm-pack build rust --target web --features wasm`) — `ozen-web`
+- a **Rust library** — a Rust client (praatfan is a likely consumer) imports it
+  via a path/git dependency;
+- **WASM** (`wasm-pack build rust --target web --features wasm`) — a WASM web app
   and the `web/` page consume it; nothing is sent to a server;
 - a **Python extension** `desphere-native` (pyo3/maturin) — the optional
   `desphere[fast]` accelerator above.
@@ -130,6 +131,6 @@ cd rust && cargo test            # byte-exact vs the same fixtures
   byte-for-byte vs ffmpeg / sph2pipe / the `shorten` encoder on real and
   synthetic streams, mono and stereo. Remaining (low priority): 8/24-bit linear
   PCM. See `docs/STATUS.md` and `docs/SHORTEN.md`.
-- **Eventually → Rust** (for `formantwise-pipe` / WASM, and for speed), mirroring
+- **Eventually → Rust** (for a Rust client / WASM, and for speed), mirroring
   `praatfan-core-clean`'s Python-first-then-Rust path. The Python implementation
   stays as the readable reference. Porting guidance: `docs/RUST_PORT.md`.

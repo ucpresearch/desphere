@@ -13,13 +13,13 @@ categories = ["multimedia::audio", "encoding", "parser-implementations"]
 exclude = ["/pkg"]
 
 # Rust port of the Python reference in ../src/desphere. The Python is the spec;
-# this must reproduce its output bit-for-bit (see ../docs/RUST_PORT.md). For
-# formantwise-pipe to import and for WASM. Dependency-free, like the Python.
+# this must reproduce its output bit-for-bit (see ../docs/RUST_PORT.md). For a
+# Rust client to import and for WASM. Dependency-free, like the Python.
 
 [lib]
 name = "desphere"
 path = "src/lib.rs"
-# rlib so formantwise-pipe can import it as a Rust crate; cdylib for the wasm
+# rlib so a Rust client can import it as a crate; cdylib for the wasm
 # and python (pyo3) targets.
 crate-type = ["rlib", "cdylib"]
 

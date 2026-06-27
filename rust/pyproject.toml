@@ -3,7 +3,7 @@
 #   or:   maturin build   -m rust/pyproject.toml --features python --release
 #
 # This is the OPTIONAL fast/native module. The pure-Python `desphere` package
-# (repo root pyproject.toml) remains the reference; formantwise-pipe can import
+# (repo root pyproject.toml) remains the reference; downstream tools can import
 # `desphere_native` for speed.
 
 [build-system]

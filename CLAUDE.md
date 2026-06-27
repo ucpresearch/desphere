@@ -18,8 +18,8 @@ the same author's low-level acoustic stack.
 
 Develop and debug in **Python** (this repo) — it stays as the readable reference
 implementation and for most use. The eventual target is a **Rust** port that
-**`formantwise-core` can import** (same Python-first-then-Rust path as
-`praatfan-core-clean`): the Python decoder is the spec the Rust port validates
+a Rust client can import (`praatfan-core-clean` is a likely consumer; same
+Python-first-then-Rust path): the Python decoder is the spec the Rust port validates
 against, both checked against the same black-box oracle outputs. Rust also closes
 the perf gap (pure-Python shorten is slow on multi-minute files). Don't start the
 Rust port until the Python side is feature-complete and validated.

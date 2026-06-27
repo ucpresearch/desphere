@@ -2,7 +2,7 @@
 //!
 //! Rust port of the Python reference in `../src/desphere`. The Python is the
 //! spec; this reproduces its output bit-for-bit (validated against the same
-//! committed fixtures). For `formantwise-pipe` to import, and for WASM/speed.
+//! committed fixtures). For a Rust client to import, and for WASM/speed.
 //! See `../docs/RUST_PORT.md`.
 //!
 //! ```no_run

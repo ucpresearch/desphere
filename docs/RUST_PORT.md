@@ -1,4 +1,4 @@
-# Porting desphere to Rust (for formantwise-pipe / WASM)
+# Porting desphere to Rust (for a Rust client / WASM)
 
 The Python decoder in `src/desphere/` is the **reference spec**: it is validated
 byte-exact against ffmpeg / sph2pipe / the `shorten` encoder on real and
