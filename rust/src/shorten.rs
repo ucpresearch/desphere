@@ -34,14 +34,35 @@ const TYPE_ULAW: u64 = 8;
 
 const NWRAP_MIN: usize = 3;
 
-// Sanity caps for corrupt input (valid streams are far below these). Keeps
-// allocations bounded and the i64 accumulators provably non-overflowing.
+// Sanity caps for corrupt input (valid streams are far below these). They bound
+// allocations and the per-field widths; they do NOT bound the *reconstructed*
+// DIFF/QLPC values (a third-order integrator or the QLPC dot product can exceed
+// i64 on crafted input), so the accumulators below use checked arithmetic and
+// surface DecodeError::Corrupt rather than panicking (a WASM trap) or wrapping.
 const MAX_NCHAN: u64 = 256;
 const MAX_BLOCKSIZE: u64 = 1 << 24;
 const MAX_MAXNLPC: u64 = 1024;
 const MAX_NMEAN: u64 = 1 << 16;
 const MAX_NSKIP: u64 = 1 << 20;
 const MAX_BITSHIFT: u64 = 32;
+// Cap total decoded samples so a few crafted bytes can't drive an unbounded
+// allocation (OOM/abort in WASM). ~1.5 G samples is far beyond any real file.
+const MAX_TOTAL_SAMPLES: usize = 1 << 30;
+
+#[inline]
+fn overflow() -> DecodeError {
+    DecodeError::Corrupt("shorten reconstruction overflowed i64 (corrupt stream)".into())
+}
+
+/// Left shift that saturates to i64 bounds on value overflow, reproducing the
+/// Python spec's bignum `v << s` followed by the downstream i16/127 clamp
+/// (history/running-mean use the pre-shift value, so saturating only the output
+/// is exact). Plain i64 `<<` silently wraps and would diverge from Python.
+#[inline]
+fn shl_sat(v: i64, s: u32) -> i64 {
+    let r = (v as i128) << s; // s <= MAX_BITSHIFT (32), so this fits i128
+    r.clamp(i64::MIN as i128, i64::MAX as i128) as i64
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -61,29 +82,35 @@ fn cdiv(a: i64, b: i64) -> i64 {
 
 /// Running-mean offset: `(Σ last nmean means + nmean/2) / nmean`, truncating.
 /// Missing history is padded with zeros, which do not change the sum.
-fn coffset(means_c: &[i64], nmean: usize) -> i64 {
+fn coffset(means_c: &[i64], nmean: usize) -> Result<i64, DecodeError> {
     if nmean == 0 {
-        return 0;
+        return Ok(0);
     }
     let start = means_c.len().saturating_sub(nmean);
-    let sum: i64 = means_c[start..].iter().sum();
-    cdiv(sum + (nmean as i64) / 2, nmean as i64)
+    let mut sum: i64 = 0;
+    for &m in &means_c[start..] {
+        sum = sum.checked_add(m).ok_or_else(overflow)?;
+    }
+    sum = sum.checked_add((nmean as i64) / 2).ok_or_else(overflow)?;
+    Ok(cdiv(sum, nmean as i64))
 }
 
 /// Type-8 BITSHIFT in mu-law magnitude-code space: slope 2^s in segment 0,
 /// halving at each 16-code boundary. `C_out = min_j((C << (s-j)) + a_j)`,
-/// `a_j = 8j + a_{j-1}/2`. C is in 0..=127 and s <= 32, so this fits i64.
+/// `a_j = 8j + a_{j-1}/2`. Computed in i128 so an adversarially large `c` cannot
+/// wrap before the caller's `> 127` saturation (matches the Python bignum).
 fn shift_code(c: i64, s: u32) -> i64 {
+    let c = c as i128;
     let mut best = c << s;
-    let mut a: i64 = 0;
+    let mut a: i128 = 0;
     for j in 1..=s {
-        a = 8 * (j as i64) + (a >> 1);
+        a = 8 * (j as i128) + (a >> 1);
         let cand = (c << (s - j)) + a;
         if cand < best {
             best = cand;
         }
     }
-    best
+    best.clamp(i64::MIN as i128, i64::MAX as i128) as i64
 }
 
 /// Map a type-8 reconstructed value + active bitshift to a mu-law byte.
@@ -169,6 +196,7 @@ pub fn decode(data: &[u8]) -> Result<(Vec<i64>, Kind, usize), DecodeError> {
     let mut means: Vec<Vec<i64>> = vec![Vec::new(); nchan];
     let mut bitshift: u32 = 0;
     let mut ch = 0usize;
+    let mut total: usize = 0; // cumulative decoded samples (OOM guard)
 
     loop {
         let fnc = br.uvar(FNSIZE)?;
@@ -216,20 +244,27 @@ pub fn decode(data: &[u8]) -> Result<(Vec<i64>, Kind, usize), DecodeError> {
             for _ in 0..order {
                 coef.push(br.var(LPC_QUANT + 1)?);
             }
-            let off = coffset(&means[ch], nmean);
+            let off = coffset(&means[ch], nmean)?;
             let mut buf: Vec<i64> = chan_hist[ch].clone();
             let mut blk = Vec::with_capacity(blocksize);
             for _ in 0..blocksize {
                 let r = br.var(k)?;
                 let v = if order > 0 {
-                    let mut dot: i64 = 0; // i64 accumulator (RUST_PORT.md)
+                    // Checked i64 accumulator: valid data peaks far inside i16, so
+                    // this only fires on corrupt/adversarial input (RUST_PORT.md).
+                    let mut dot: i64 = 0;
                     let n = buf.len();
                     for (j, &c) in coef.iter().enumerate() {
-                        dot += c * (buf[n - 1 - j] - off);
+                        let d = buf[n - 1 - j].checked_sub(off).ok_or_else(overflow)?;
+                        let term = c.checked_mul(d).ok_or_else(overflow)?;
+                        dot = dot.checked_add(term).ok_or_else(overflow)?;
                     }
-                    r + ((dot + (1i64 << LPC_QUANT)) >> LPC_QUANT) + off
+                    let pred = dot.checked_add(1i64 << LPC_QUANT).ok_or_else(overflow)? >> LPC_QUANT;
+                    r.checked_add(pred)
+                        .and_then(|x| x.checked_add(off))
+                        .ok_or_else(overflow)?
                 } else {
-                    r + off
+                    r.checked_add(off).ok_or_else(overflow)?
                 };
                 blk.push(v);
                 buf.push(v);
@@ -238,19 +273,29 @@ pub fn decode(data: &[u8]) -> Result<(Vec<i64>, Kind, usize), DecodeError> {
         } else if fnc <= 3 {
             // DIFF0..3
             let k = br.uvar(ENERGYSIZE)? as u32 + 1;
-            let off = if fnc == 0 { coffset(&means[ch], nmean) } else { 0 };
+            let off = if fnc == 0 { coffset(&means[ch], nmean)? } else { 0 };
             let hist = &chan_hist[ch];
             let (mut p1, mut p2, mut p3) =
                 (hist[hist.len() - 1], hist[hist.len() - 2], hist[hist.len() - 3]);
             let mut blk = Vec::with_capacity(blocksize);
             for _ in 0..blocksize {
                 let r = br.var(k)?;
+                // Checked: a DIFF3 third-order integrator can exceed i64 on
+                // crafted input; valid audio stays tiny.
                 let v = match fnc {
-                    0 => r + off,
-                    1 => r + p1,
-                    2 => r + 2 * p1 - p2,
-                    _ => r + 3 * p1 - 3 * p2 + p3,
-                };
+                    0 => r.checked_add(off),
+                    1 => r.checked_add(p1),
+                    2 => 2i64
+                        .checked_mul(p1)
+                        .and_then(|t| r.checked_add(t))
+                        .and_then(|x| x.checked_sub(p2)),
+                    _ => 3i64
+                        .checked_mul(p1)
+                        .and_then(|t1| r.checked_add(t1))
+                        .and_then(|x| 3i64.checked_mul(p2).and_then(|t2| x.checked_sub(t2)))
+                        .and_then(|x| x.checked_add(p3)),
+                }
+                .ok_or_else(overflow)?;
                 blk.push(v);
                 p3 = p2;
                 p2 = p1;
@@ -275,9 +320,18 @@ pub fn decode(data: &[u8]) -> Result<(Vec<i64>, Kind, usize), DecodeError> {
             chan_hist[ch] = new_hist;
         }
         if nmean > 0 {
-            let s: i64 = blk.iter().sum(); // i64 accumulator
-            means[ch].push(cdiv(s + (blocksize as i64) / 2, blocksize as i64));
+            let mut s: i64 = 0; // checked i64 accumulator
+            for &x in &blk {
+                s = s.checked_add(x).ok_or_else(overflow)?;
+            }
+            s = s.checked_add((blocksize as i64) / 2).ok_or_else(overflow)?;
+            means[ch].push(cdiv(s, blocksize as i64));
         }
+
+        // Bound total output so a non-terminating stream can't OOM (WASM abort).
+        total = total.checked_add(blk.len()).filter(|&t| t <= MAX_TOTAL_SAMPLES).ok_or_else(|| {
+            DecodeError::Corrupt("shorten stream exceeds the maximum decoded length".into())
+        })?;
 
         // Emit, applying bitshift per sample type.
         if is_ulaw {
@@ -286,7 +340,7 @@ pub fn decode(data: &[u8]) -> Result<(Vec<i64>, Kind, usize), DecodeError> {
             }
         } else if bitshift > 0 {
             for &v in &blk {
-                chan_out[ch].push(v << bitshift);
+                chan_out[ch].push(shl_sat(v, bitshift));
             }
         } else {
             chan_out[ch].extend_from_slice(&blk);

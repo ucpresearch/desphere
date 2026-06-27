@@ -19,12 +19,16 @@ pub fn write_wav(
         )));
     }
     let bytes_per_sample = (bits_per_sample / 8) as u32;
-    let block_align = channels as u32 * bytes_per_sample; // fits u16
-    let byte_rate = sample_rate * block_align;
+    let block_align = channels as u32 * bytes_per_sample; // <= 65535*4, fits u32
+    // u64 math so the size checks are real on 32-bit targets (wasm32: usize=u32).
+    let byte_rate = sample_rate as u64 * block_align as u64;
+    if byte_rate > u32::MAX as u64 {
+        return Err(DecodeError::Corrupt("WAV byte_rate exceeds 32-bit field".into()));
+    }
     let data_size = data.len();
     let pad = data_size & 1; // data chunk must be word-aligned
 
-    let riff_size = 4 + (8 + 16) + (8 + data_size + pad);
+    let riff_size = 4u64 + (8 + 16) + (8 + data_size as u64 + pad as u64);
     if riff_size > 0xFFFF_FFFF {
         return Err(DecodeError::Corrupt(format!(
             "output exceeds the 4 GB RIFF/WAV size limit ({data_size} bytes of PCM)"
@@ -40,7 +44,7 @@ pub fn write_wav(
     out.extend_from_slice(&PCM_FORMAT.to_le_bytes());
     out.extend_from_slice(&channels.to_le_bytes());
     out.extend_from_slice(&sample_rate.to_le_bytes());
-    out.extend_from_slice(&byte_rate.to_le_bytes());
+    out.extend_from_slice(&(byte_rate as u32).to_le_bytes());
     out.extend_from_slice(&(block_align as u16).to_le_bytes());
     out.extend_from_slice(&bits_per_sample.to_le_bytes());
     out.extend_from_slice(b"data");

@@ -11,10 +11,11 @@
 //! std::fs::write("utt.wav", wav).unwrap();
 //! ```
 //!
-//! Ported & fixture-validated: SPHERE header parser, capability gate (PCM 16/32,
-//! G.711 mu-law/a-law, embedded-shorten incl. QLPC and type-8 bitshift), WAV
-//! writer, and the end-to-end transcode. Still to do: pyo3 + wasm-bindgen
-//! bindings (mirroring praatfan-core-clean's layout).
+//! Complete & fixture-validated: SPHERE header parser, capability gate (PCM
+//! 16/32, G.711 mu-law/a-law, embedded-shorten incl. QLPC and type-8 bitshift),
+//! WAV writer, end-to-end transcode, plus optional `wasm` (wasm-bindgen) and
+//! `python` (pyo3) bindings. Corrupt input fails loud (`DecodeError`); the
+//! decoder never panics (safe for WASM).
 
 pub mod bitreader;
 pub mod codecs;

@@ -31,10 +31,11 @@ pub fn decode_payload(header: &SphereHeader, data: &[u8]) -> Result<(u16, Vec<u8
 pub fn transcode(sph_bytes: &[u8]) -> Result<Vec<u8>, DecodeError> {
     let (header, data) = SphereHeader::read(sph_bytes)?;
     let (bits, pcm) = decode_payload(&header, data)?;
-    wav::write_wav(
-        header.channel_count()? as u16,
-        header.sample_rate()? as u32,
-        bits,
-        &pcm,
-    )
+    // Range-check rather than silently truncate (`as u16`/`as u32`) into the WAV
+    // header — fail loud on a header that can't be represented.
+    let channels = u16::try_from(header.channel_count()?)
+        .map_err(|_| DecodeError::Corrupt("channel_count too large for WAV".into()))?;
+    let sample_rate = u32::try_from(header.sample_rate()?)
+        .map_err(|_| DecodeError::Corrupt("sample_rate too large for WAV".into()))?;
+    wav::write_wav(channels, sample_rate, bits, &pcm)
 }

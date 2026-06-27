@@ -88,7 +88,16 @@ impl SphereHeader {
         self.fields.get("sample_coding").map(String::as_str).unwrap_or("pcm")
     }
     pub fn expected_data_bytes(&self) -> Result<usize, DecodeError> {
-        Ok((self.sample_count()? * self.channel_count()? * self.sample_n_bytes()?) as usize)
+        // Checked: a huge declared sample_count must fail loud, not panic
+        // (overflow) — matches Python's bignum-then-error behavior.
+        let count = self.sample_count()?;
+        let chans = self.channel_count()?;
+        let nbytes = self.sample_n_bytes()?;
+        count
+            .checked_mul(chans)
+            .and_then(|x| x.checked_mul(nbytes))
+            .and_then(|x| usize::try_from(x).ok())
+            .ok_or_else(|| corrupt("declared payload size overflows"))
     }
 
     fn validate(&self) -> Result<(), DecodeError> {
@@ -128,6 +137,21 @@ fn parse_field_line(line: &str) -> Result<(String, String), DecodeError> {
     if !type_tok.starts_with('-') || type_tok.len() < 2 {
         return Err(corrupt(format!("unknown field type in line: {line:?}")));
     }
-    // We store the raw value string; typed access (int) parses on demand.
+    // Validate the declared type at parse time (fail-loud parity with Python),
+    // then store the raw value string.
+    match type_tok.as_bytes()[1] {
+        b'i' => {
+            value.parse::<i64>().map_err(|_| {
+                corrupt(format!("field {name:?} declared integer but value is {value:?}"))
+            })?;
+        }
+        b'r' => {
+            value.parse::<f64>().map_err(|_| {
+                corrupt(format!("field {name:?} declared real but value is {value:?}"))
+            })?;
+        }
+        b's' => {}
+        _ => return Err(corrupt(format!("unknown field type {type_tok:?} in line: {line:?}"))),
+    }
     Ok((name.to_string(), value.to_string()))
 }
