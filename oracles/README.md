@@ -1,6 +1,6 @@
 # Oracle binaries (gitignored, Syncthing-synced)
 
-Black-box decode oracles for validating mercator. **We run these; we never read
+Black-box decode oracles for validating desphere. **We run these; we never read
 their source** (clean-room rule). Not committed (license + binary); they travel
 across machines via Syncthing.
 

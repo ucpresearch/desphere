@@ -1,0 +1,114 @@
+name: Release
+
+# Builds and publishes two PyPI projects from this one repo:
+#   * desphere         — pure-Python package (hatchling): sdist + universal wheel
+#   * desphere-native  — optional Rust accelerator (maturin): abi3 wheels + sdist
+#
+# Publishing uses PyPI Trusted Publishing (OIDC) — no API tokens stored. Each
+# project authorises this workflow under its OWN GitHub Environment, so configure
+# on PyPI (see RELEASING.md):
+#   desphere         <- environment: pypi-desphere
+#   desphere-native  <- environment: pypi-desphere-native
+#
+# Build runs on every tag push and on manual dispatch; the publish jobs only run
+# for a version tag (refs/tags/v*), so dispatch is a safe dry run.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ---- desphere (pure Python) ------------------------------------------------
+  build-pure:
+    name: Build pure desphere (sdist + wheel)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build --outdir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-pure
+          path: dist/*
+
+  # ---- desphere-native (Rust accelerator) ------------------------------------
+  build-native-wheels:
+    name: Build native wheels (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64 }
+          - { os: ubuntu-latest, target: aarch64 }
+          - { os: macos-latest, target: universal2-apple-darwin }
+          - { os: windows-latest, target: x64 }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build abi3 wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: rust
+          target: ${{ matrix.target }}
+          manylinux: auto
+          # --features python pulls in pyo3 + abi3-py39 (one wheel per platform).
+          args: --release --out dist --features python
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-native-${{ matrix.os }}-${{ matrix.target }}
+          path: rust/dist/*
+
+  build-native-sdist:
+    name: Build native sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: rust
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-native-sdist
+          path: rust/dist/*
+
+  # ---- publish (only on a version tag) ---------------------------------------
+  publish-pure:
+    name: Publish desphere to PyPI
+    needs: build-pure
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: pypi-desphere
+    permissions:
+      id-token: write # Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-pure
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-native:
+    name: Publish desphere-native to PyPI
+    needs: [build-native-wheels, build-native-sdist]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: pypi-desphere-native
+    permissions:
+      id-token: write # Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-native-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1

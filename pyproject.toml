@@ -35,5 +35,18 @@ Homepage = "https://github.com/ucpresearch/desphere"
 [tool.hatch.build.targets.wheel]
 packages = ["src/desphere"]
 
+# The pure-Python distribution is just the package + tests + docs. A strict
+# allowlist so the sdist never sweeps in rust/, rust/target/, oracles/, web/, etc.
+# (the isolated build doesn't see .gitignore).
+[tool.hatch.build.targets.sdist]
+only-include = [
+    "src/desphere",
+    "tests",
+    "README.md",
+    "LICENSE",
+    "PROVENANCE.md",
+    "CHANGELOG.md",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
