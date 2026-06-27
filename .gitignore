@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Oracle / scratch output (regenerated, not committed)
+*.ref.wav
+/scratch/
+
+# Editor
+*.swp
+.DS_Store
