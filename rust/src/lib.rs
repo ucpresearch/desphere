@@ -5,14 +5,27 @@
 //! committed fixtures). For `formantwise-pipe` to import, and for WASM/speed.
 //! See `../docs/RUST_PORT.md`.
 //!
-//! Status: core shorten decoder + bit reader + G.711 ported & fixture-validated.
-//! Next: SPHERE header parser, capability gate, WAV writer, and pyo3/wasm
+//! ```no_run
+//! let sph = std::fs::read("utt.sph").unwrap();
+//! let wav = desphere::transcode(&sph).unwrap();
+//! std::fs::write("utt.wav", wav).unwrap();
+//! ```
+//!
+//! Ported & fixture-validated: SPHERE header parser, capability gate (PCM 16/32,
+//! G.711 mu-law/a-law, embedded-shorten incl. QLPC and type-8 bitshift), WAV
+//! writer, and the end-to-end transcode. Still to do: pyo3 + wasm-bindgen
 //! bindings (mirroring praatfan-core-clean's layout).
 
 pub mod bitreader;
+pub mod codecs;
 pub mod error;
 pub mod g711;
 pub mod shorten;
+pub mod sphere;
+pub mod transcode;
+pub mod wav;
 
 pub use error::DecodeError;
 pub use shorten::{decode as decode_shorten, Kind};
+pub use sphere::SphereHeader;
+pub use transcode::{decode_payload, transcode};

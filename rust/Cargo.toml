@@ -15,3 +15,8 @@ name = "desphere"
 path = "src/lib.rs"
 
 [dependencies]
+
+# Test-only: parse the shared fixture manifest. The library itself stays
+# dependency-free; this does not affect downstream crates.
+[dev-dependencies]
+serde_json = "1"
