@@ -24,10 +24,20 @@ MIT-licensed (see `PROVENANCE.md`).
   panics (safe for WASM).
 
 ### Packaging
-- Python package `desphere` with the `sph2wav` CLI (pure Python, zero deps).
-- Rust crate `desphere` (dependency-free core).
-- WASM bindings via `wasm-bindgen` (opt-in `wasm` feature).
+- Python package `desphere` with the `sph2wav` CLI (pure Python, zero deps). The
+  `transcode_bytes` one-shot API and the CLI transparently use the optional Rust
+  accelerator when installed (`pip install desphere[fast]` → `desphere-native`)
+  and fall back to pure Python otherwise — same bytes either way.
+- Rust crate `desphere` (dependency-free core); `formantwise-core` imports it via
+  a path/git dependency.
+- WASM bindings via `wasm-bindgen` (opt-in `wasm` feature) + a self-contained
+  client-side `sph2wav` web page (`web/`, deployed to GitHub Pages) — converts in
+  the browser, nothing uploaded.
 - Python-native module `desphere-native` via pyo3/maturin (opt-in `python`
-  feature) for `formantwise-pipe` to import.
+  feature).
+- The CLI and web page pass a stray RIFF/WAV input through unchanged, with a
+  warning (the library API stays strict: SPHERE in, fail loud).
+- Not published to crates.io / npm (consumers depend on the repo directly); PyPI
+  is the target registry.
 
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/

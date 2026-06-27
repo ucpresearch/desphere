@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>sph2wav — desphere</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px/1.55 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto;
+         padding: 0 1rem; }
+  h1 { margin-bottom: .2rem; }
+  .sub { color: #888; margin-top: 0; }
+  .note { background: #fff7e6; border: 1px solid #f0d28a; color: #5a4500;
+          border-radius: 8px; padding: .8rem 1rem; margin: 1.2rem 0; }
+  @media (prefers-color-scheme: dark) {
+    .note { background: #2a2410; border-color: #5a4d1a; color: #e8d9a0; }
+  }
+  #drop { border: 2px dashed #999; border-radius: 12px; padding: 2.5rem 1rem;
+          text-align: center; cursor: pointer; transition: .15s; }
+  #drop.over { border-color: #3b82f6; background: rgba(59,130,246,.08); }
+  #out { margin-top: 1.2rem; }
+  .err { color: #c0392b; } .ok { color: #1e874b; }
+  a.dl { display: inline-block; margin-top: .5rem; font-weight: 600; }
+  code { background: rgba(127,127,127,.18); padding: .05em .35em; border-radius: 4px; }
+  footer { margin-top: 2.5rem; color: #888; font-size: .9rem; }
+</style>
+</head>
+<body>
+  <h1>sph2wav</h1>
+  <p class="sub">Flatten a NIST SPHERE file into a plain WAV — in your browser.</p>
+
+  <div class="note">
+    <strong>Please don't use this if a real tool can do the job.</strong>
+    <code>sph2pipe</code>, <code>ffmpeg</code>, and <code>sox</code> all decode
+    SPHERE. But we know they're old and awkward to install — so if that's in your
+    way, drop a <code>.sph</code> file below and get a <code>.wav</code> back.
+    <strong>Everything runs locally in this page; your file is never uploaded
+    anywhere.</strong>
+  </div>
+
+  <div id="drop" tabindex="0">
+    <strong>Drop a .sph file here</strong><br />or click to choose
+    <input id="file" type="file" accept=".sph,.wav,application/octet-stream" hidden />
+  </div>
+
+  <div id="out"></div>
+
+  <footer>
+    desphere — clean-room, MIT-licensed, zero-server. PCM, G.711 μ-law/a-law, and
+    embedded-shorten (incl. QLPC &amp; μ-law type-8). Decoding compiled to WebAssembly
+    from the same Rust used by <code>formantwise-pipe</code>.
+    <a href="https://github.com/ucpresearch/desphere">source</a>.
+  </footer>
+
+<script type="module">
+import init, { transcode } from "./pkg/desphere.js";
+
+const drop = document.getElementById("drop");
+const fileInput = document.getElementById("file");
+const out = document.getElementById("out");
+let ready = init().catch((e) => { out.innerHTML =
+  `<p class="err">Failed to load the decoder: ${e}</p>`; throw e; });
+
+const isWav = (u8) =>
+  u8.length >= 12 &&
+  u8[0] === 0x52 && u8[1] === 0x49 && u8[2] === 0x46 && u8[3] === 0x46 && // RIFF
+  u8[8] === 0x57 && u8[9] === 0x41 && u8[10] === 0x56 && u8[11] === 0x45; // WAVE
+
+function offerDownload(bytes, name, msgHtml) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+  out.innerHTML = msgHtml +
+    `<br /><a class="dl" href="${url}" download="${name}">⬇ download ${name}</a>`;
+}
+
+async function handle(file) {
+  out.textContent = "Decoding…";
+  try {
+    await ready;
+    const u8 = new Uint8Array(await file.arrayBuffer());
+    const base = file.name.replace(/\.(sph|wav)$/i, "");
+    if (isWav(u8)) {
+      offerDownload(u8, base + ".wav",
+        `<span class="ok">That's already a RIFF/WAV file</span> — nothing to do; here it is back.`);
+      return;
+    }
+    const wav = transcode(u8); // throws on malformed input, with the exact message
+    offerDownload(wav, base + ".wav",
+      `<span class="ok">Done.</span> ${u8.length.toLocaleString()} bytes in → ${wav.length.toLocaleString()} bytes WAV.`);
+  } catch (e) {
+    out.innerHTML = `<p class="err">${String(e.message || e)}</p>`;
+  }
+}
+
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("keydown", (e) => { if (e.key === "Enter") fileInput.click(); });
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) handle(fileInput.files[0]); });
+["dragover", "dragenter"].forEach((ev) =>
+  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) =>
+  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => { if (e.dataTransfer.files[0]) handle(e.dataTransfer.files[0]); });
+</script>
+</body>
+</html>

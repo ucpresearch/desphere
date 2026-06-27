@@ -4,7 +4,14 @@
 transcoder from **NIST SPHERE** audio (the `.sph` format used by TIMIT, WSJ,
 Switchboard, and friends) to plain **RIFF/WAV**. The CLI is `sph2wav`.
 
+> **No tooling, no upload:** there's a browser page that converts a `.sph` to
+> `.wav` entirely client-side (WASM) — see [`web/`](web/index.html). Prefer
+> `sph2pipe`/`ffmpeg`/`sox` if you have them; the page is for when you don't.
+
 ```bash
+pip install desphere            # pure Python, zero deps, works anywhere
+pip install "desphere[fast]"    # + optional Rust accelerator (big shorten files)
+
 sph2wav utterance.sph             # -> utterance.wav
 sph2wav utterance.sph out.wav
 sph2wav --info utterance.sph      # inspect the SPHERE header
@@ -12,12 +19,19 @@ sph2wav utterance.sph -           # WAV to stdout
 ```
 
 ```python
-from desphere import read_sphere, transcode
+from desphere import read_sphere, transcode, transcode_bytes
 
+# Streaming API (the reference):
 header, data = read_sphere("utterance.sph")
 with open("utterance.wav", "wb") as f:
     transcode(header, data, f)
+
+# One-shot bytes API — transparently uses the Rust accelerator if installed:
+wav_bytes = transcode_bytes(open("utterance.sph", "rb").read())
 ```
+
+The CLI passes a stray `.wav` through unchanged (with a warning), so pointing it
+at an already-decoded file is harmless.
 
 ## Why
 
@@ -76,6 +90,23 @@ python tools/make_fixtures.py     # regenerate fixtures + manifest
 pytest                            # validate everything
 ```
 
+## Rust, WASM, and consumers
+
+The Python in `src/desphere` is the reference **spec**; [`rust/`](rust/) is a
+Rust port that reproduces it **bit-for-bit** (same fixtures), for speed and for
+the web. It builds three ways from one crate:
+
+- a **Rust library** — `formantwise-core` imports it via a path/git dependency;
+- **WASM** (`wasm-pack build rust --target web --features wasm`) — `ozen-web`
+  and the `web/` page consume it; nothing is sent to a server;
+- a **Python extension** `desphere-native` (pyo3/maturin) — the optional
+  `desphere[fast]` accelerator above.
+
+Because the consumers live in the same `ucpresearch` org, they depend on desphere
+directly (path/git); publishing to **crates.io / npm is not required** (and is
+skipped). **PyPI** is the one registry we target (the pure-Python `desphere`,
+plus the optional `desphere-native` wheels).
+
 ## Development
 
 The virtualenv lives **outside** the (Syncthing-synced) repo and is symlinked in:
@@ -85,6 +116,9 @@ uv venv ~/local/scr/venvs/desphere
 ln -s ~/local/scr/venvs/desphere .venv
 uv pip install -e ".[dev]"
 pytest
+
+# Rust port:
+cd rust && cargo test            # byte-exact vs the same fixtures
 ```
 
 ## Roadmap

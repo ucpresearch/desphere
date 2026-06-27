@@ -103,6 +103,19 @@ VIRTUAL_ENV=$HOME/local/scr/venvs/desphere uv pip install -e ".[dev]"
 .venv/bin/sph2wav input.sph output.wav
 ```
 
+## Distribution & clients
+
+- **PyPI** is the only target registry. Model: **Python-first + optional native
+  accel** — `pip install desphere` (pure, zero-dep, the spec); `desphere[fast]`
+  adds the Rust `desphere-native` wheel, which `transcode_bytes`/the CLI use
+  transparently (fallback to pure Python otherwise).
+- **No crates.io / npm**: `formantwise-core` (Rust) and `ozen-web` (WASM) live in
+  the same `ucpresearch` org and consume `rust/` via path/git deps directly.
+- **Web page**: `web/index.html` — client-side `sph2wav` (WASM), deployed to
+  GitHub Pages by `.github/workflows/pages.yml`. Nothing uploaded.
+- **CLI + web** pass a stray RIFF/WAV through unchanged (with a warning); the
+  library API stays strict (SPHERE in, fail loud).
+
 ## Roadmap
 
 - **Now → Python.** Develop and debug in Python (this repo). Keep the Python

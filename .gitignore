@@ -33,3 +33,6 @@ venv/
 # Editor
 *.swp
 .DS_Store
+
+# Built WASM for the web page (regenerated; deployed by CI)
+/web/pkg/
