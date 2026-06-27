@@ -1,10 +1,16 @@
 [package]
 name = "desphere"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
+rust-version = "1.74"
 description = "Clean-room NIST SPHERE (and Shorten) to RIFF/WAV transcoder"
 license = "MIT"
+authors = ["Uriel Cohen Priva"]
 repository = "https://github.com/ucpresearch/desphere"
+readme = "README.md"
+keywords = ["sphere", "nist", "shorten", "wav", "audio"]
+categories = ["multimedia::audio", "encoding", "parser-implementations"]
+exclude = ["/pkg"]
 
 # Rust port of the Python reference in ../src/desphere. The Python is the spec;
 # this must reproduce its output bit-for-bit (see ../docs/RUST_PORT.md). For

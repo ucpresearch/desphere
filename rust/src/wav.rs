@@ -13,17 +13,19 @@ pub fn write_wav(
     bits_per_sample: u16,
     data: &[u8],
 ) -> Result<Vec<u8>, DecodeError> {
-    if !bits_per_sample.is_multiple_of(8) {
+    if bits_per_sample & 7 != 0 {
         return Err(DecodeError::Corrupt(format!(
             "bits_per_sample must be a multiple of 8, got {bits_per_sample}"
         )));
     }
     let bytes_per_sample = (bits_per_sample / 8) as u32;
     let block_align = channels as u32 * bytes_per_sample; // <= 65535*4, fits u32
-    // u64 math so the size checks are real on 32-bit targets (wasm32: usize=u32).
+                                                          // u64 math so the size checks are real on 32-bit targets (wasm32: usize=u32).
     let byte_rate = sample_rate as u64 * block_align as u64;
     if byte_rate > u32::MAX as u64 {
-        return Err(DecodeError::Corrupt("WAV byte_rate exceeds 32-bit field".into()));
+        return Err(DecodeError::Corrupt(
+            "WAV byte_rate exceeds 32-bit field".into(),
+        ));
     }
     let data_size = data.len();
     let pad = data_size & 1; // data chunk must be word-aligned

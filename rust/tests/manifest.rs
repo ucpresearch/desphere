@@ -25,6 +25,10 @@ fn to_hex(bytes: &[u8]) -> String {
 
 #[test]
 fn manifest_fixtures_match_expected() {
+    if !fixdir().join("manifest.json").exists() {
+        eprintln!("fixtures absent; skipping");
+        return;
+    }
     let text = fs::read_to_string(fixdir().join("manifest.json")).expect("read manifest");
     let manifest: Value = serde_json::from_str(&text).expect("parse manifest");
 
@@ -33,7 +37,8 @@ fn manifest_fixtures_match_expected() {
         let kind = spec["kind"].as_str().unwrap();
         let blob = fs::read(fixdir().join(name)).unwrap_or_else(|_| panic!("read {name}"));
         // Every fixture has a well-formed SPHERE header (the body is what varies).
-        let (header, data) = SphereHeader::read(&blob).unwrap_or_else(|e| panic!("{name}: header parse: {e}"));
+        let (header, data) =
+            SphereHeader::read(&blob).unwrap_or_else(|e| panic!("{name}: header parse: {e}"));
         let result = decode_payload(&header, data);
 
         match kind {

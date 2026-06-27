@@ -13,6 +13,12 @@ fn fixture(name: &str) -> PathBuf {
     p
 }
 
+/// The fixtures live in the repo (shared with the Python tests), not inside the
+/// crate, so a packaged/published crate won't have them — skip gracefully there.
+fn fixtures_present() -> bool {
+    fixture("qlpc_ar2.shn").exists()
+}
+
 fn pcm_le(values: &[i64]) -> Vec<u8> {
     let mut out = Vec::with_capacity(values.len() * 2);
     for &v in values {
@@ -23,6 +29,10 @@ fn pcm_le(values: &[i64]) -> Vec<u8> {
 }
 
 fn check_pcm(stem: &str) {
+    if !fixtures_present() {
+        eprintln!("fixtures absent; skipping");
+        return;
+    }
     let shn = fs::read(fixture(&format!("{stem}.shn"))).unwrap();
     let (vals, kind, _n) = decode(&shn).expect("decode failed");
     assert_eq!(kind, Kind::Pcm16);
@@ -50,16 +60,27 @@ fn qlpc_high_order_byte_exact() {
 
 #[test]
 fn ulaw_bitshift_byte_exact() {
+    if !fixtures_present() {
+        eprintln!("fixtures absent; skipping");
+        return;
+    }
     let shn = fs::read(fixture("ulaw_bitshift.shn")).unwrap();
     let (vals, kind, _n) = decode(&shn).expect("decode failed");
     assert_eq!(kind, Kind::Ulaw);
     let got: Vec<u8> = vals.iter().map(|&v| v as u8).collect();
     let truth = fs::read(fixture("ulaw_bitshift.ulaw")).unwrap();
-    assert_eq!(got, truth, "ulaw_bitshift: mu-law bytes differ from ground truth");
+    assert_eq!(
+        got, truth,
+        "ulaw_bitshift: mu-law bytes differ from ground truth"
+    );
 }
 
 #[test]
 fn rejects_corrupt_input() {
+    if !fixtures_present() {
+        eprintln!("fixtures absent; skipping");
+        return;
+    }
     // bad magic, truncation, and unsupported version must Err (never panic).
     assert!(decode(b"nope").is_err());
     assert!(decode(b"ajkg").is_err()); // magic but no version

@@ -1,3 +1,4 @@
 /target
-Cargo.lock
 /pkg
+# Cargo.lock IS committed: this crate also builds binaries (examples), a cdylib
+# (wasm/python), and is the spec-parity reference, so reproducible builds matter.

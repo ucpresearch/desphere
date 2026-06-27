@@ -15,7 +15,11 @@ struct BitWriter {
 }
 impl BitWriter {
     fn new() -> Self {
-        BitWriter { buf: Vec::new(), cur: 0, n: 0 }
+        BitWriter {
+            buf: Vec::new(),
+            cur: 0,
+            n: 0,
+        }
     }
     fn bit(&mut self, b: u32) {
         self.cur = (self.cur << 1) | (b as u8 & 1);
@@ -47,7 +51,11 @@ impl BitWriter {
         self.uvar(v, k);
     }
     fn var(&mut self, s: i64, k: u32) {
-        let u = if s >= 0 { (s as u64) << 1 } else { (((-s) as u64) << 1) - 1 };
+        let u = if s >= 0 {
+            (s as u64) << 1
+        } else {
+            (((-s) as u64) << 1) - 1
+        };
         self.uvar(u, k);
     }
     fn finish(mut self) -> Vec<u8> {
@@ -81,7 +89,10 @@ fn diff3_overflow_fails_loud_not_panic() {
     w.uvar(FN_QUIT, 2);
     let data = w.finish();
     let r = decode(&data);
-    assert!(r.is_err(), "expected fail-loud on DIFF3 overflow, got {r:?}");
+    assert!(
+        r.is_err(),
+        "expected fail-loud on DIFF3 overflow, got {r:?}"
+    );
 }
 
 /// `v << bitshift` used to wrap i64 (Rust) while Python computes the bignum then

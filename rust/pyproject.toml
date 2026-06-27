@@ -12,7 +12,7 @@ build-backend = "maturin"
 
 [project]
 name = "desphere-native"
-version = "0.0.1"
+version = "0.1.0"
 description = "Rust/pyo3 NIST SPHERE (and Shorten) to RIFF/WAV transcoder"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -25,6 +25,10 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Topic :: Multimedia :: Sound/Audio :: Conversion",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ucpresearch/desphere"
+Repository = "https://github.com/ucpresearch/desphere"
 
 [tool.maturin]
 features = ["python"]

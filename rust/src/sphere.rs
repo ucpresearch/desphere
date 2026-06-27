@@ -23,18 +23,32 @@ impl SphereHeader {
         if !blob.starts_with(MAGIC) {
             return Err(corrupt("not a NIST SPHERE file (missing 'NIST_1A' magic)"));
         }
-        let nl1 = blob.iter().position(|&b| b == b'\n').ok_or_else(|| corrupt("truncated SPHERE header"))?;
+        let nl1 = blob
+            .iter()
+            .position(|&b| b == b'\n')
+            .ok_or_else(|| corrupt("truncated SPHERE header"))?;
         let rest = &blob[nl1 + 1..];
-        let nl2 = rest.iter().position(|&b| b == b'\n').ok_or_else(|| corrupt("truncated SPHERE header (no size line)"))?;
-        let size_line = std::str::from_utf8(&rest[..nl2]).map_err(|_| corrupt("invalid header size line"))?.trim();
-        let header_size: usize = size_line.parse().map_err(|_| corrupt(format!("invalid header size line: {size_line:?}")))?;
+        let nl2 = rest
+            .iter()
+            .position(|&b| b == b'\n')
+            .ok_or_else(|| corrupt("truncated SPHERE header (no size line)"))?;
+        let size_line = std::str::from_utf8(&rest[..nl2])
+            .map_err(|_| corrupt("invalid header size line"))?
+            .trim();
+        let header_size: usize = size_line
+            .parse()
+            .map_err(|_| corrupt(format!("invalid header size line: {size_line:?}")))?;
         if header_size == 0 {
             return Err(corrupt("non-positive header size"));
         }
         if blob.len() < header_size {
-            return Err(corrupt(format!("header claims {header_size} bytes but only {} available", blob.len())));
+            return Err(corrupt(format!(
+                "header claims {header_size} bytes but only {} available",
+                blob.len()
+            )));
         }
-        let text = std::str::from_utf8(&blob[..header_size]).map_err(|_| corrupt("SPHERE header is not valid ASCII"))?;
+        let text = std::str::from_utf8(&blob[..header_size])
+            .map_err(|_| corrupt("SPHERE header is not valid ASCII"))?;
 
         let mut lines = text.split('\n');
         lines.next(); // magic
@@ -56,7 +70,10 @@ impl SphereHeader {
         if !saw_end {
             return Err(corrupt("SPHERE header missing 'end_head' terminator"));
         }
-        let h = SphereHeader { fields, header_size };
+        let h = SphereHeader {
+            fields,
+            header_size,
+        };
         h.validate()?;
         Ok(h)
     }
@@ -76,16 +93,30 @@ impl SphereHeader {
             .map_err(|_| corrupt(format!("field {name:?} is not an integer")))
     }
 
-    pub fn sample_count(&self) -> Result<i64, DecodeError> { self.int("sample_count") }
-    pub fn sample_rate(&self) -> Result<i64, DecodeError> { self.int("sample_rate") }
-    pub fn channel_count(&self) -> Result<i64, DecodeError> { self.int("channel_count") }
-    pub fn sample_n_bytes(&self) -> Result<i64, DecodeError> { self.int("sample_n_bytes") }
+    pub fn sample_count(&self) -> Result<i64, DecodeError> {
+        self.int("sample_count")
+    }
+    pub fn sample_rate(&self) -> Result<i64, DecodeError> {
+        self.int("sample_rate")
+    }
+    pub fn channel_count(&self) -> Result<i64, DecodeError> {
+        self.int("channel_count")
+    }
+    pub fn sample_n_bytes(&self) -> Result<i64, DecodeError> {
+        self.int("sample_n_bytes")
+    }
 
     pub fn sample_byte_format(&self) -> &str {
-        self.fields.get("sample_byte_format").map(String::as_str).unwrap_or("1")
+        self.fields
+            .get("sample_byte_format")
+            .map(String::as_str)
+            .unwrap_or("1")
     }
     pub fn sample_coding(&self) -> &str {
-        self.fields.get("sample_coding").map(String::as_str).unwrap_or("pcm")
+        self.fields
+            .get("sample_coding")
+            .map(String::as_str)
+            .unwrap_or("pcm")
     }
     pub fn expected_data_bytes(&self) -> Result<usize, DecodeError> {
         // Checked: a huge declared sample_count must fail loud, not panic
@@ -101,22 +132,41 @@ impl SphereHeader {
     }
 
     fn validate(&self) -> Result<(), DecodeError> {
-        for k in ["sample_count", "sample_rate", "channel_count", "sample_n_bytes"] {
+        for k in [
+            "sample_count",
+            "sample_rate",
+            "channel_count",
+            "sample_n_bytes",
+        ] {
             if !self.fields.contains_key(k) {
-                return Err(corrupt(format!("SPHERE header missing required field: {k}")));
+                return Err(corrupt(format!(
+                    "SPHERE header missing required field: {k}"
+                )));
             }
         }
         if self.channel_count()? < 1 {
-            return Err(corrupt(format!("channel_count must be >= 1, got {}", self.channel_count()?)));
+            return Err(corrupt(format!(
+                "channel_count must be >= 1, got {}",
+                self.channel_count()?
+            )));
         }
         if self.sample_n_bytes()? < 1 {
-            return Err(corrupt(format!("sample_n_bytes must be >= 1, got {}", self.sample_n_bytes()?)));
+            return Err(corrupt(format!(
+                "sample_n_bytes must be >= 1, got {}",
+                self.sample_n_bytes()?
+            )));
         }
         if self.sample_count()? < 0 {
-            return Err(corrupt(format!("sample_count must be >= 0, got {}", self.sample_count()?)));
+            return Err(corrupt(format!(
+                "sample_count must be >= 0, got {}",
+                self.sample_count()?
+            )));
         }
         if self.sample_rate()? < 1 {
-            return Err(corrupt(format!("sample_rate must be >= 1, got {}", self.sample_rate()?)));
+            return Err(corrupt(format!(
+                "sample_rate must be >= 1, got {}",
+                self.sample_rate()?
+            )));
         }
         Ok(())
     }
@@ -142,16 +192,24 @@ fn parse_field_line(line: &str) -> Result<(String, String), DecodeError> {
     match type_tok.as_bytes()[1] {
         b'i' => {
             value.parse::<i64>().map_err(|_| {
-                corrupt(format!("field {name:?} declared integer but value is {value:?}"))
+                corrupt(format!(
+                    "field {name:?} declared integer but value is {value:?}"
+                ))
             })?;
         }
         b'r' => {
             value.parse::<f64>().map_err(|_| {
-                corrupt(format!("field {name:?} declared real but value is {value:?}"))
+                corrupt(format!(
+                    "field {name:?} declared real but value is {value:?}"
+                ))
             })?;
         }
         b's' => {}
-        _ => return Err(corrupt(format!("unknown field type {type_tok:?} in line: {line:?}"))),
+        _ => {
+            return Err(corrupt(format!(
+                "unknown field type {type_tok:?} in line: {line:?}"
+            )))
+        }
     }
     Ok((name.to_string(), value.to_string()))
 }

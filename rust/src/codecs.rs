@@ -39,7 +39,10 @@ fn pcm_table_to_le(values: &[i16]) -> Vec<u8> {
 /// Decode a payload per its header. Returns `(bits_per_sample, little_endian_pcm)`.
 pub fn decode(h: &SphereHeader, data: &[u8]) -> Result<(u16, Vec<u8>), DecodeError> {
     let coding = h.sample_coding();
-    let tokens: Vec<String> = coding.split(',').map(|t| t.trim().to_ascii_lowercase()).collect();
+    let tokens: Vec<String> = coding
+        .split(',')
+        .map(|t| t.trim().to_ascii_lowercase())
+        .collect();
     let base = tokens[0].as_str();
     let compression = if tokens.len() > 1 && !tokens[1].is_empty() {
         Some(tokens[1].as_str())
@@ -130,7 +133,10 @@ fn decode_shorten(h: &SphereHeader, data: &[u8]) -> Result<(u16, Vec<u8>), Decod
             Ok((16, pcm_table_to_le(&expanded)))
         }
         shorten::Kind::Pcm16 => {
-            let clipped: Vec<i16> = values.iter().map(|&v| v.clamp(-32768, 32767) as i16).collect();
+            let clipped: Vec<i16> = values
+                .iter()
+                .map(|&v| v.clamp(-32768, 32767) as i16)
+                .collect();
             Ok((16, pcm_table_to_le(&clipped)))
         }
     }
