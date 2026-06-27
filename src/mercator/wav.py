@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import struct
 
+from .errors import MercatorError
+
 PCM_FORMAT = 1  # WAVE_FORMAT_PCM
 
 
@@ -35,6 +37,16 @@ def write_wav(
     pad = data_size & 1  # data chunk must be word-aligned
 
     riff_size = 4 + (8 + 16) + (8 + data_size + pad)
+
+    # RIFF/WAV stores sizes in unsigned 32-bit fields. Fail loud BEFORE writing
+    # any bytes (so we never leave a truncated "RIFF" stub) rather than letting
+    # struct.pack raise an opaque struct.error mid-write. riff_size >= data_size,
+    # so this one check covers both 32-bit size fields.
+    if riff_size > 0xFFFFFFFF:
+        raise MercatorError(
+            "output exceeds the 4 GB RIFF/WAV size limit "
+            f"({data_size} bytes of PCM overflow the 32-bit size fields)"
+        )
 
     out.write(b"RIFF")
     out.write(struct.pack("<I", riff_size))

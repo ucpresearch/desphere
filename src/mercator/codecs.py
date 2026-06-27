@@ -16,7 +16,7 @@ import struct
 from typing import Tuple
 
 from . import g711, shorten
-from .errors import UnsupportedCoding, UnsupportedFormat
+from .errors import SphereHeaderError, UnsupportedCoding, UnsupportedFormat
 from .sphere import SphereHeader
 
 # Map NIST sample_byte_format -> endianness of the stored samples.
@@ -103,8 +103,9 @@ class AlawCodec(_G711Codec):
 class ShortenCodec:
     """Embedded-shorten (v2) lossless decompression to little-endian PCM.
 
-    Handles 16-bit PCM shorten types and the lossless mu-law mode (type 8,
-    expanded to 16-bit PCM via G.711). QLPC blocks raise a precise error.
+    Handles 16-bit PCM shorten types, the lossless mu-law mode (type 8, including
+    BITSHIFT, expanded to 16-bit PCM via G.711), and QLPC (LPC-predicted) blocks.
+    Only unsupported shorten sample types raise a precise error.
     """
 
     name = "embedded-shorten-v2.00"
@@ -117,6 +118,18 @@ class ShortenCodec:
                 f"shorten channel count {nchan} disagrees with SPHERE header "
                 f"channel_count {header.channel_count}"
             )
+        # Cross-check the decoded length against the header, mirroring the PCM
+        # path's truncation guard: a stream that QUITs early would otherwise yield
+        # a silently-short WAV. Excess (final-block padding) is trimmed.
+        expected = header.sample_count * nchan
+        if len(values) < expected:
+            raise SphereHeaderError(
+                f"shorten stream decoded {len(values) // nchan} samples/channel, "
+                f"but the SPHERE header declares {header.sample_count} "
+                "(stream truncated or QUIT came early)"
+            )
+        if len(values) > expected:
+            values = values[:expected]
         if kind == "ulaw":
             return 16, g711.expand(bytes(values), g711.ULAW_TABLE)
         # kind == "pcm16": signed 16-bit little-endian

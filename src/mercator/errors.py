@@ -20,10 +20,10 @@ class SphereHeaderError(MercatorError):
 
 
 class UnsupportedCoding(MercatorError):
-    """The ``sample_coding`` is valid but not implemented yet.
+    """The ``sample_coding`` is structurally valid but not implemented.
 
-    Examples: ``ulaw``/``alaw`` (G.711) or any compressed coding such as
-    ``pcm,embedded-shorten-v2.00``. We fail loudly rather than guess.
+    Examples: a base coding mercator does not recognize, or a compression token
+    other than ``embedded-shorten-v2.00``. We fail loudly rather than guess.
     """
 
 

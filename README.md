@@ -57,8 +57,8 @@ loudly on anything not yet validated** — never emit a plausible-but-wrong WAV.
 | `pcm`, 8-bit / 24-bit               | ⛔ rejected (`UnsupportedFormat`) — sign/packing not yet validated |
 | `ulaw` / `alaw` (G.711, 8-bit)      | ✅ supported (Phase B) — verified byte-exact vs ffmpeg on all 256 codes |
 | `pcm,embedded-shorten-v2.00` (16-bit) | ✅ supported (Phase C) — byte-exact vs ffmpeg, mono & stereo |
-| `ulaw,embedded-shorten` (shorten type 8) | ⛔ rejected (`UnsupportedFormat`) — lossless-μ-law shorten mode, future work |
-| shorten QLPC blocks                 | ⛔ rejected (`UnsupportedFormat`) — LPC-predicted blocks, future work |
+| `ulaw,embedded-shorten` (shorten type 8), incl. bitshift | ✅ supported (Phase C) — byte-exact vs sph2pipe (real CALLHOME) |
+| shorten QLPC (LPC) blocks           | ✅ supported (Phase C) — byte-exact vs shorten encoder + ffmpeg (orders 1–20) |
 
 Adding a coding means registering a decoder in `mercator/codecs.py`; until then
 the gate raises a precise error.
@@ -91,10 +91,11 @@ pytest
 
 - **Phase A** (done): SPHERE header + 16/32-bit PCM, lossless.
 - **Phase B** (done): μ-law / a-law decode (ITU-T G.711).
-- **Phase C** (done, with one gap): embedded-shorten of 16-bit PCM and lossless
-  μ-law (type 8), validated byte-for-byte vs ffmpeg / sph2pipe on real corpus
-  files, mono and stereo. **Open:** type-8 + bitshift (loud μ-law speech) and
-  QLPC blocks — both currently fail loud. See `docs/STATUS.md` and `docs/SHORTEN.md`.
-- **Eventually → Rust.** A Rust port (for `formantwise-core` to import, and for
-  speed) mirroring `praatfan-core-clean`'s Python-first-then-Rust path. The
-  Python implementation stays as the readable reference. See `docs/STATUS.md`.
+- **Phase C** (done): embedded-shorten of 16-bit PCM, lossless μ-law (type 8,
+  including the non-linear BITSHIFT remap), and QLPC (LPC) blocks — validated
+  byte-for-byte vs ffmpeg / sph2pipe / the `shorten` encoder on real and
+  synthetic streams, mono and stereo. Remaining (low priority): 8/24-bit linear
+  PCM. See `docs/STATUS.md` and `docs/SHORTEN.md`.
+- **Eventually → Rust** (for `formantwise-pipe` / WASM, and for speed), mirroring
+  `praatfan-core-clean`'s Python-first-then-Rust path. The Python implementation
+  stays as the readable reference. Porting guidance: `docs/RUST_PORT.md`.

@@ -63,4 +63,4 @@ def test_ulaw_bitshift_fixture_actually_uses_bitshift():
         k = br.uvar(shorten._ENERGYSIZE) + 1
         for _ in range(blocksize):
             br.var(k)
-    assert max_shift >= 3, f"fixture max bitshift {max_shift} < 3"
+    assert max_shift >= 4, f"fixture max bitshift {max_shift} < 4"

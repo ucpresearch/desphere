@@ -28,7 +28,7 @@ def _wav(path):
         return w.getnchannels(), list(struct.unpack("<%dh" % n, w.readframes(w.getnframes())))
 
 
-@pytest.mark.parametrize("stem", ["qlpc_ar2", "qlpc_ar2_stereo"])
+@pytest.mark.parametrize("stem", ["qlpc_ar2", "qlpc_ar2_stereo", "qlpc_hi"])
 def test_qlpc_decodes_to_ground_truth(stem):
     with open(os.path.join(FIX, stem + ".shn"), "rb") as f:
         values, kind, nchan = shorten.decode(f.read())
@@ -36,6 +36,52 @@ def test_qlpc_decodes_to_ground_truth(stem):
     assert kind == "pcm16"
     assert nchan == want_nchan
     assert values == want  # interleaved, byte-exact
+
+
+def test_qlpc_hi_exercises_high_order_history():
+    """qlpc_hi must carry maxnlpc>3 AND order>3 blocks, so the nwrap=maxnlpc
+    larger-history path (not just the DIFF-sized 3) is covered in CI."""
+    with open(os.path.join(FIX, "qlpc_hi.shn"), "rb") as f:
+        data = f.read()
+    br = shorten._BitReader(data, 4)
+    br.pos += 1  # version
+    br.ulong()  # ftype
+    br.ulong()  # nchan
+    blocksize = br.ulong()
+    maxnlpc = br.ulong()
+    br.ulong()  # nmean
+    nskip = br.ulong()
+    for _ in range(nskip):
+        br.uvar(shorten._NSKIPSIZE)
+    assert maxnlpc > shorten._NWRAP
+    max_order = 0
+    while True:
+        fn = br.uvar(shorten._FNSIZE)
+        if fn == shorten._FN_QUIT:
+            break
+        if fn == shorten._FN_BLOCKSIZE:
+            blocksize = br.ulong(); continue
+        if fn == shorten._FN_BITSHIFT:
+            br.uvar(shorten._BITSHIFTSIZE); continue
+        if fn == shorten._FN_VERBATIM:
+            for _ in range(br.uvar(shorten._VERBATIM_CKSIZE)):
+                br.uvar(shorten._VERBATIM_BYTE)
+            continue
+        if fn == shorten._FN_QLPC:
+            k = br.uvar(shorten._ENERGYSIZE) + 1
+            order = br.uvar(shorten._LPCQSIZE)
+            max_order = max(max_order, order)
+            for _ in range(order):
+                br.var(shorten._LPC_QUANT + 1)
+            for _ in range(blocksize):
+                br.var(k)
+            continue
+        if fn == shorten._FN_ZERO:
+            continue
+        k = br.uvar(shorten._ENERGYSIZE) + 1
+        for _ in range(blocksize):
+            br.var(k)
+    assert max_order > shorten._NWRAP, "fixture must contain order>3 QLPC blocks"
 
 
 def test_qlpc_fixture_actually_uses_lpc_blocks():

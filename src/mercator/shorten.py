@@ -2,9 +2,11 @@
 
 Clean-room implementation from Tony Robinson (1994), *SHORTEN: Simple lossless
 and near-lossless waveform compression* (CUED/F-INFENG/TR.156), plus black-box
-validation against ffmpeg's decoder output (run as a binary; its source was
-never read). Verified byte-exact vs ffmpeg on the sph2pipe test files
-(123_1/2 pcbe/pcle, mono and stereo).
+validation against decoder/encoder output (ffmpeg, sph2pipe, and the `shorten`
+encoder, all run as binaries; their source was never read). Verified byte-exact:
+16-bit PCM vs ffmpeg (sph2pipe corpus, mono & stereo); lossless mu-law (type 8,
+including the non-linear BITSHIFT remap) vs sph2pipe on real CALLHOME; and QLPC
+(LPC) blocks vs the shorten encoder + ffmpeg (orders 1..20, mono & stereo).
 
 Bitstream summary (MSB-first):
   - magic ``ajkg`` + 1-byte version, then a bit-packed stream.
@@ -15,8 +17,10 @@ Bitstream summary (MSB-first):
     then nskip skip bytes.
   - per block: command uvar(2). DIFF0..3 read energy=uvar(3); residuals use Rice
     parameter k = energy+1; reconstruct by polynomial integration (DIFF0 adds a
-    running-mean offset). ZERO = a silent block. VERBATIM/BLOCKSIZE/BITSHIFT as
-    documented. QUIT ends the stream.
+    running-mean offset). QLPC reads order=uvar(2) + var(6) coefficients and
+    predicts from mean-removed history (see _ulaw_value_to_byte / the QLPC
+    branch). ZERO = a silent block. VERBATIM/BLOCKSIZE/BITSHIFT as documented.
+    QUIT ends the stream.
   - running-mean offset (DIFF0): per block store mean = (sum + blocksize/2) /
     blocksize; offset = (Σ last nmean means + nmean/2) / nmean.  All divisions
     truncate toward zero (C semantics).
@@ -134,7 +138,16 @@ class _BitReader:
         self.bit = 0
 
     def get_bit(self) -> int:
-        b = (self.data[self.pos] >> (7 - self.bit)) & 1
+        try:
+            byte = self.data[self.pos]
+        except IndexError:
+            # Running past the end means a truncated/corrupt stream. Raise the
+            # project's error type (a no-op try in CPython when not triggered, so
+            # this does not slow the hot path) instead of a bare IndexError.
+            raise MercatorError(
+                "truncated or corrupt shorten stream: ran past end of bitstream"
+            ) from None
+        b = (byte >> (7 - self.bit)) & 1
         self.bit += 1
         if self.bit == 8:
             self.bit = 0
@@ -171,11 +184,18 @@ def decode(data: bytes) -> Tuple[List[int], str, int]:
     """
     if data[:4] != _MAGIC:
         raise MercatorError("not a shorten stream (missing 'ajkg' magic)")
+    if len(data) < 5:
+        raise MercatorError("truncated shorten stream: missing version byte")
     br = _BitReader(data, 4)
     version = br.data[br.pos]
     br.pos += 1
-    if version > 2:
-        raise UnsupportedFormat(f"shorten version {version} not supported (need <= 2)")
+    # Only embedded-shorten v2 is validated; v0/v1 use different defaults and
+    # would silently mis-decode under v2 semantics, so fail loud rather than
+    # emit a plausible-but-wrong WAV.
+    if version != 2:
+        raise UnsupportedFormat(
+            f"shorten version {version} not supported (only v2 is validated)"
+        )
 
     ftype = br.ulong()
     nchan = br.ulong()
@@ -185,6 +205,13 @@ def decode(data: bytes) -> Tuple[List[int], str, int]:
     nskip = br.ulong()
     for _ in range(nskip):
         br.uvar(_NSKIPSIZE)
+
+    # Structural sanity: a zero/negative channel count or blocksize is corrupt
+    # and would otherwise crash later (modulo-by-zero, empty channel lists).
+    if nchan < 1:
+        raise MercatorError(f"invalid shorten channel count {nchan}")
+    if blocksize < 1:
+        raise MercatorError(f"invalid shorten blocksize {blocksize}")
 
     if ftype not in _SUPPORTED_FTYPES:
         raise UnsupportedFormat(
@@ -213,9 +240,21 @@ def decode(data: bytes) -> Tuple[List[int], str, int]:
             break
         if fn == _FN_BLOCKSIZE:
             blocksize = br.ulong()
+            if blocksize < 1:
+                raise MercatorError(f"invalid shorten blocksize {blocksize}")
             continue
         if fn == _FN_BITSHIFT:
             bitshift = br.uvar(_BITSHIFTSIZE)
+            # uvar's unary part is unbounded, so a corrupt stream could encode an
+            # astronomically large shift; a real bitshift only strips trailing
+            # zero bits (<=16 for 16-bit PCM, <=12 for mu-law). Cap it so a huge
+            # value cannot turn every sample into an O(shift) loop in _shift_code
+            # or a multi-million-bit `v << bitshift`. Fail loud (project policy).
+            if bitshift > 32:
+                raise UnsupportedFormat(
+                    f"shorten bitshift {bitshift} is implausibly large "
+                    "(corrupt or unsupported stream)"
+                )
             continue
         if fn == _FN_VERBATIM:
             n = br.uvar(_VERBATIM_CKSIZE)
@@ -229,16 +268,28 @@ def decode(data: bytes) -> Tuple[List[int], str, int]:
         elif fn == _FN_QLPC:
             k = br.uvar(_ENERGYSIZE) + 1
             order = br.uvar(_LPCQSIZE)
+            # A valid block's order never exceeds maxnlpc (the history we keep);
+            # a larger value is corrupt and would index past the history buffer.
+            if order > maxnlpc:
+                raise MercatorError(
+                    f"shorten QLPC order {order} exceeds maxnlpc {maxnlpc} "
+                    "(corrupt stream)"
+                )
             coef = [br.var(_LPC_QUANT + 1) for _ in range(order)]
             off = coffset(ch)
             buf = list(hist)
             blk = []
             for _ in range(blocksize):
                 r = br.var(k)
-                dot = 0
-                for j in range(order):
-                    dot += coef[j] * (buf[-1 - j] - off)
-                v = r + ((dot + (1 << _LPC_QUANT)) >> _LPC_QUANT) + off
+                if order:
+                    dot = 0
+                    for j in range(order):
+                        dot += coef[j] * (buf[-1 - j] - off)
+                    v = r + ((dot + (1 << _LPC_QUANT)) >> _LPC_QUANT) + off
+                else:
+                    # order 0 = predict the mean only (no LPC term); avoids the
+                    # +1 the rounding term would add to an empty dot product.
+                    v = r + off
                 blk.append(v)
                 buf.append(v)
         elif fn in (_FN_DIFF0, _FN_DIFF1, _FN_DIFF2, _FN_DIFF3):

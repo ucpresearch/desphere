@@ -22,8 +22,11 @@ intent.
 | μ-law embedded-shorten **with bitshift** | ✅ vs sph2pipe (real CALLHOME, 14.4M samples) + shorten encoder (shift 0–3,12) |
 | shorten QLPC blocks | ✅ vs shorten encoder + ffmpeg (orders 1–20) |
 
-46 tests pass (`pytest`). All "✅" verified byte-for-byte against a black-box
-oracle (never reading decoder source).
+56 tests pass (`pytest`). All "✅" verified byte-for-byte against a black-box
+oracle (never reading decoder source). A multi-agent review (see git log) then
+hardened the fail-loud paths: a v2-only version gate, header/blocksize/bitshift
+sanity caps (no decode-hang on corrupt input), a decoded-sample-count
+cross-check, EOF→`MercatorError`, a 4 GB WAV-size guard, and atomic CLI output.
 
 ## type-8 + BITSHIFT — SOLVED
 
@@ -105,9 +108,11 @@ VIRTUAL_ENV=$HOME/local/scr/venvs/mercator uv pip install -e ".[dev]"
 - **Now → Python.** Develop and debug in Python (this repo). Keep the Python
   implementation as the readable reference and for most use — it stays.
 - **Next (optional, low priority):** 8/24-bit linear PCM (see above).
-- **Eventually → Rust.** Port to a Rust library (mirroring `praatfan-core-clean`'s
-  Python-first-then-Rust approach) so that **`formantwise-core` can import it**.
-  The Python decoder is the spec the Rust port validates against; both check
-  against the same oracle outputs. Rust also fixes the perf gap (the pure-Python
+- **Eventually → Rust** (for `formantwise-pipe` / WASM, and for speed), mirroring
+  `praatfan-core-clean`'s Python-first-then-Rust approach. The Python decoder is
+  the spec the Rust port validates against; both check against the same oracle
+  outputs / committed fixtures. Rust also fixes the perf gap (the pure-Python
   shorten decoder is slow on multi-minute files — CALLHOME's 14 M samples take
-  minutes).
+  minutes). Concrete porting guidance — integer widths, shift/division
+  semantics, EOF/overflow policy, fixture-based validation — is in
+  `docs/RUST_PORT.md`.

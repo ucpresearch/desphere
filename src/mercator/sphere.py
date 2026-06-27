@@ -183,6 +183,14 @@ class SphereHeader:
             raise SphereHeaderError(
                 f"sample_n_bytes must be >= 1, got {self.sample_n_bytes}"
             )
+        if self.sample_count < 0:
+            raise SphereHeaderError(
+                f"sample_count must be >= 0, got {self.sample_count}"
+            )
+        if self.sample_rate < 1:
+            raise SphereHeaderError(
+                f"sample_rate must be >= 1, got {self.sample_rate}"
+            )
 
     def __repr__(self) -> str:
         return (

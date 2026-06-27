@@ -15,6 +15,7 @@ The test (tests/test_qlpc.py) decodes the .shn and asserts it equals the .wav,
 so it is self-contained at test time (no encoder/oracle needed).
 """
 from __future__ import annotations
+import math
 import os
 import struct
 import subprocess
@@ -40,9 +41,22 @@ def ar2_signal(n=4096, a1=1.7, a2=-0.72, drive=300.0, seed=12345):
     return out
 
 
-def _write(name, channels):
+def multisine_signal(n=4096, comps=((0.05, 8000.0), (0.13, 6000.0),
+                                    (0.21, 4000.0), (0.31, 3000.0))):
+    """Deterministic multi-resonance signal. Its broadband spectral structure
+    drives shorten to pick HIGH per-block LPC orders (>3), exercising the
+    nwrap=maxnlpc larger-history path that the AR(2) signal (orders 2-3) never
+    reaches."""
+    out = []
+    for i in range(n):
+        v = sum(a * math.sin(2 * math.pi * f * i) for f, a in comps)
+        out.append(max(-30000, min(30000, int(round(v)))))
+    return out
+
+
+def _write(name, channels, order=3):
     """channels: list of per-channel int16 lists (all same length). Writes a WAV
-    + a shorten -p 3 (QLPC) stream; returns (wav, shn)."""
+    + a shorten -p <order> (QLPC) stream; returns (wav, shn)."""
     wav = os.path.join(OUT_DIR, name + ".wav")
     shn = os.path.join(OUT_DIR, name + ".shn")
     n = len(channels[0])
@@ -50,8 +64,8 @@ def _write(name, channels):
     with wave.open(wav, "wb") as w:
         w.setnchannels(len(channels)); w.setsampwidth(2); w.setframerate(16000)
         w.writeframes(struct.pack("<%dh" % len(inter), *inter))
-    # -p 3 forces the LPC search; -v2 is the SPHERE embedded-shorten version.
-    subprocess.run([SHORTEN, "-p", "3", "-v2", wav, shn], check=True)
+    # -p <order> sets the LPC search ceiling; -v2 is the SPHERE shorten version.
+    subprocess.run([SHORTEN, "-p", str(order), "-v2", wav, shn], check=True)
     print("wrote", wav, "and", shn, f"({os.path.getsize(shn)} bytes)")
 
 
@@ -63,6 +77,9 @@ def main():
     # stereo: two distinct AR(2) channels -> exercises alternating-channel QLPC.
     _write("qlpc_ar2_stereo",
            [ar2_signal(seed=12345), ar2_signal(a1=1.4, a2=-0.6, seed=999)])
+    # high order: maxnlpc=12 with blocks of order >3 -> exercises the
+    # nwrap=maxnlpc larger-history branch (AR(2) above never gets past order 3).
+    _write("qlpc_hi", [multisine_signal()], order=12)
 
 
 if __name__ == "__main__":

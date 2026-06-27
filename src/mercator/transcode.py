@@ -23,7 +23,11 @@ def transcode(header: SphereHeader, data: bytes, out) -> None:
     """
     # Compressed codings (e.g. embedded-shorten) carry a bitstream whose length
     # is unrelated to the uncompressed sample count, so only length-check raw PCM.
-    compressed = "," in header.sample_coding
+    # Mirror resolve_codec's tokenization: a coding is compressed only when it has
+    # a non-empty second token. A bare "pcm," is plain PCM and must still be
+    # length-validated (a raw `"," in coding` test would wrongly skip the guard).
+    tokens = [t.strip().lower() for t in header.sample_coding.split(",")]
+    compressed = len(tokens) > 1 and bool(tokens[1])
     if not compressed:
         expected = header.expected_data_bytes
         if len(data) < expected:

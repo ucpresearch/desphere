@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import tempfile
 
 from . import __version__
 from .errors import MercatorError
@@ -39,7 +40,16 @@ def _print_info(header: SphereHeader, in_path: str, data_len: int) -> None:
     print(f"  sample_sig_bits    : {header.sample_sig_bits}")
     print(f"  sample_count       : {header.sample_count} ({duration:.3f} s)")
     print(f"  header_size        : {header.header_size} bytes")
-    print(f"  payload bytes      : {data_len} (expected {header.expected_data_bytes})")
+    tokens = [t.strip().lower() for t in header.sample_coding.split(",")]
+    if len(tokens) > 1 and tokens[1]:
+        # Compressed: the payload is a bitstream, so expected_data_bytes is the
+        # UNCOMPRESSED size, not a target to match.
+        print(
+            f"  payload bytes      : {data_len} "
+            f"(compressed; uncompressed ~{header.expected_data_bytes})"
+        )
+    else:
+        print(f"  payload bytes      : {data_len} (expected {header.expected_data_bytes})")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -99,8 +109,20 @@ def main(argv=None) -> int:
         if to_stdout:
             transcode(header, data, sys.stdout.buffer)
         else:
-            with open(out_path, "wb") as f:
-                transcode(header, data, f)
+            # Write to a temp file and atomically rename on success, so a failed
+            # decode never leaves a partial or 0-byte .wav behind.
+            out_dir = os.path.dirname(os.path.abspath(out_path)) or "."
+            fd, tmp = tempfile.mkstemp(suffix=".wav.tmp", dir=out_dir)
+            try:
+                with os.fdopen(fd, "wb") as f:
+                    transcode(header, data, f)
+                os.replace(tmp, out_path)
+            except BaseException:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
     except MercatorError as exc:
         print(f"sph2wav: {exc}", file=sys.stderr)
         return 2

@@ -59,12 +59,14 @@ def main():
     shn = os.path.join(OUT_DIR, "ulaw_bitshift.shn")
     # synthetic signal -> mu-law -> snap each code to a multiple of 8 (so shorten
     # finds 3 common low zero bits and emits bitshift).
-    # n/drive chosen so per-block dynamic range makes shorten emit a mix of
-    # bitshift 0..3 (a louder, longer signal than the QLPC fixture).
+    # Two sections so the encoder emits a span of shifts: a moderate part snapped
+    # to multiples of 8 (-> bitshift 0..3) and a loud part snapped to multiples of
+    # 32 (-> bitshift 4), so the derived intercept a_4 is exercised in CI too.
     data = bytearray()
-    for s in ar2_signal(n=8192, drive=3000.0):
-        m = linear2ulaw(s)
-        data.append(rank_to_m(round(m_to_rank(m) / 8) * 8))
+    for s in ar2_signal(n=4096, drive=3000.0):
+        data.append(rank_to_m(round(m_to_rank(linear2ulaw(s)) / 8) * 8))
+    for s in ar2_signal(n=8192, drive=12000.0):
+        data.append(rank_to_m(round(m_to_rank(linear2ulaw(s)) / 32) * 32))
     with open(raw, "wb") as f:
         f.write(data)
     subprocess.run([SHORTEN, "-t", "ulaw", "-v2", raw, shn], check=True)
