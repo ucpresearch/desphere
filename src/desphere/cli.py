@@ -19,7 +19,7 @@ import tempfile
 from . import __version__
 from .errors import DesphereError
 from .sphere import SphereHeader
-from .transcode import read_sphere, transcode
+from .transcode import transcode_bytes
 
 
 def _default_output(in_path: str) -> str:
@@ -71,20 +71,30 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _is_wav(b: bytes) -> bool:
+    return len(b) >= 12 and b[:4] == b"RIFF" and b[8:12] == b"WAVE"
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
 
     try:
-        header, data = read_sphere(args.input)
-    except DesphereError as exc:
-        print(f"sph2wav: {exc}", file=sys.stderr)
-        return 2
+        with open(args.input, "rb") as f:
+            raw = f.read()
     except OSError as exc:
         print(f"sph2wav: cannot read {args.input}: {exc}", file=sys.stderr)
         return 2
 
     if args.info:
-        _print_info(header, args.input, len(data))
+        if _is_wav(raw):
+            print(f"{args.input}\n  (already a RIFF/WAV file, not NIST SPHERE)")
+            return 0
+        try:
+            header = SphereHeader.parse(raw)
+        except DesphereError as exc:
+            print(f"sph2wav: {exc}", file=sys.stderr)
+            return 2
+        _print_info(header, args.input, len(raw) - header.header_size)
         return 0
 
     out_path = args.output or _default_output(args.input)
@@ -105,29 +115,38 @@ def main(argv=None) -> int:
             )
             return 2
 
-    try:
-        if to_stdout:
-            transcode(header, data, sys.stdout.buffer)
-        else:
-            # Write to a temp file and atomically rename on success, so a failed
-            # decode never leaves a partial or 0-byte .wav behind.
-            out_dir = os.path.dirname(os.path.abspath(out_path)) or "."
-            fd, tmp = tempfile.mkstemp(suffix=".wav.tmp", dir=out_dir)
-            try:
-                with os.fdopen(fd, "wb") as f:
-                    transcode(header, data, f)
-                os.replace(tmp, out_path)
-            except BaseException:
-                try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-                raise
-    except DesphereError as exc:
-        print(f"sph2wav: {exc}", file=sys.stderr)
-        return 2
+    if _is_wav(raw):
+        # A stray WAV is already what the caller wants — pass it through, warning
+        # so the mistake is visible. (The library stays strict; this is CLI UX.)
+        print(
+            f"sph2wav: {args.input} is already a RIFF/WAV file; "
+            "copying it through unchanged",
+            file=sys.stderr,
+        )
+        wav = raw
+    else:
+        try:
+            wav = transcode_bytes(raw)  # uses the Rust accelerator if installed
+        except DesphereError as exc:
+            print(f"sph2wav: {exc}", file=sys.stderr)
+            return 2
 
-    if not to_stdout:
+    if to_stdout:
+        sys.stdout.buffer.write(wav)
+    else:
+        # Atomic write: a temp file renamed on success leaves no partial output.
+        out_dir = os.path.dirname(os.path.abspath(out_path)) or "."
+        fd, tmp = tempfile.mkstemp(suffix=".wav.tmp", dir=out_dir)
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(wav)
+            os.replace(tmp, out_path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
         print(f"sph2wav: wrote {out_path}", file=sys.stderr)
     return 0
 

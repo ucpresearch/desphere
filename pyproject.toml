@@ -22,6 +22,9 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+# Optional Rust accelerator: `pip install desphere[fast]`. desphere transparently
+# uses it for the slow path (shorten on large files) and falls back otherwise.
+fast = ["desphere-native"]
 
 [project.scripts]
 sph2wav = "desphere.cli:main"

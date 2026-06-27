@@ -22,7 +22,13 @@ from .errors import (
     UnsupportedFormat,
 )
 from .sphere import SphereHeader
-from .transcode import read_sphere, sph_to_wav, transcode
+from .transcode import (
+    native_available,
+    read_sphere,
+    sph_to_wav,
+    transcode,
+    transcode_bytes,
+)
 from .wav import write_wav
 
 __version__ = "0.1.0"
@@ -32,7 +38,9 @@ __all__ = [
     "SphereHeader",
     "read_sphere",
     "transcode",
+    "transcode_bytes",
     "sph_to_wav",
+    "native_available",
     "write_wav",
     "DesphereError",
     "SphereHeaderError",

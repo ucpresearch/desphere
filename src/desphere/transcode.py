@@ -2,15 +2,50 @@
 
 from __future__ import annotations
 
+import io
+
 from .codecs import resolve_codec
-from .errors import SphereHeaderError
+from .errors import DesphereError, SphereHeaderError
 from .sphere import SphereHeader
 from .wav import write_wav
+
+# Optional Rust accelerator (pip install desphere[fast]). The pure-Python path
+# below is the reference and always works; the native module just makes the slow
+# path (shorten on large files) fast. Same byte-for-byte output.
+try:
+    import desphere_native as _native
+except ImportError:  # pragma: no cover - native is optional
+    _native = None
 
 
 def read_sphere(path) -> "tuple[SphereHeader, bytes]":
     """Parse a SPHERE file, returning ``(header, raw_audio_bytes)``."""
     return SphereHeader.from_file(path)
+
+
+def transcode_bytes(sph_bytes: bytes) -> bytes:
+    """Transcode a whole SPHERE file (bytes) to WAV bytes.
+
+    Uses the native (Rust) accelerator when installed, otherwise the pure-Python
+    reference — identical output either way. Raises :class:`DesphereError` on
+    malformed input. (Strict: SPHERE in only; the CLI handles a stray WAV.)
+    """
+    if _native is not None:
+        try:
+            return _native.transcode(sph_bytes)
+        except ValueError as exc:
+            # Normalize the native error to our hierarchy so callers catch one type.
+            raise DesphereError(str(exc)) from exc
+    header = SphereHeader.parse(sph_bytes)
+    data = sph_bytes[header.header_size:]
+    buf = io.BytesIO()
+    transcode(header, data, buf)
+    return buf.getvalue()
+
+
+def native_available() -> bool:
+    """True if the Rust accelerator (desphere-native) is importable."""
+    return _native is not None
 
 
 def transcode(header: SphereHeader, data: bytes, out) -> None:
