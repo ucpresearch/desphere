@@ -15,7 +15,9 @@ name = "desphere-native"
 version = "0.1.0"
 description = "Rust/pyo3 NIST SPHERE (and Shorten) to RIFF/WAV transcoder"
 readme = "README.md"
-requires-python = ">=3.8"
+# abi3-py39 (rust/Cargo.toml) builds cp39-abi3 wheels, so the floor is 3.9 —
+# matching the pure desphere package. Don't advertise 3.8 (no compatible wheel).
+requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "Uriel Cohen Priva" }]
 keywords = ["sphere", "nist", "shorten", "wav", "audio", "transcode"]
