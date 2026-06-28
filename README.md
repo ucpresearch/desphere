@@ -4,9 +4,11 @@
 transcoder from **NIST SPHERE** audio (the `.sph` format used by TIMIT, WSJ,
 Switchboard, and friends) to plain **RIFF/WAV**. The CLI is `sph2wav`.
 
-> **No tooling, no upload:** there's a browser page that converts a `.sph` to
-> `.wav` entirely client-side (WASM) — see [`web/`](web/index.html). Prefer
-> `sph2pipe`/`ffmpeg`/`sox` if you have them; the page is for when you don't.
+> **No tooling, no upload:** a browser page converts one or many `.sph` files to
+> **WAV or FLAC** entirely client-side (WASM) — live at
+> <https://ucpresearch.github.io/desphere/> (source in [`web/`](web/index.html)).
+> Multiple files come back as a `.zip`. Prefer `sph2pipe`/`ffmpeg`/`sox` if you
+> have them; the page is for when you don't.
 
 ```bash
 pip install desphere            # pure Python, zero deps, works anywhere
@@ -134,6 +136,9 @@ cd rust && cargo test            # byte-exact vs the same fixtures
   byte-for-byte vs ffmpeg / sph2pipe / the `shorten` encoder on real and
   synthetic streams, mono and stereo. Remaining (low priority): 8/24-bit linear
   PCM. See `docs/STATUS.md` and `docs/SHORTEN.md`.
-- **Eventually → Rust** (for a Rust client / WASM, and for speed), mirroring
-  `praatfan-core-clean`'s Python-first-then-Rust path. The Python implementation
-  stays as the readable reference. Porting guidance: `docs/RUST_PORT.md`.
+- **Rust port (done):** a bit-for-bit Rust reimplementation in [`rust/`](rust/)
+  powers the `desphere[fast]` accelerator, the WASM web page, and any Rust client,
+  mirroring `praatfan-core-clean`'s Python-first-then-Rust path. The Python
+  implementation stays the readable reference. Porting guidance: `docs/RUST_PORT.md`.
+- **Released:** `desphere` and `desphere-native` are on PyPI (v0.1.0); the web
+  page is live on GitHub Pages. Release process: `RELEASING.md`.

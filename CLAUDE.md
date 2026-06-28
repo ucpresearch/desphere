@@ -14,15 +14,20 @@ the same author's low-level acoustic stack.
 > QLPC are **solved** (byte-exact). The only remaining gap is 8/24-bit linear PCM
 > (rare; no corpus test file; low priority).
 
-## Architecture & roadmap (Python-first, Rust-eventual)
+## Architecture & roadmap (Python-first, Rust accelerator — both done)
 
 Develop and debug in **Python** (this repo) — it stays as the readable reference
-implementation and for most use. The eventual target is a **Rust** port that
-a Rust client can import (`praatfan-core-clean` is a likely consumer; same
-Python-first-then-Rust path): the Python decoder is the spec the Rust port validates
-against, both checked against the same black-box oracle outputs. Rust also closes
-the perf gap (pure-Python shorten is slow on multi-minute files). Don't start the
-Rust port until the Python side is feature-complete and validated.
+implementation and the spec. The **Rust** port in `rust/` is **complete and
+byte-identical** to the Python (a Rust client can import it; `praatfan-core-clean`
+is a likely consumer; same Python-first-then-Rust path as praatfan). The Python
+decoder is the spec the Rust port validates against, both checked against the same
+black-box oracle outputs. Rust also closes the perf gap (pure-Python shorten is
+slow on multi-minute files) and powers WASM + the `desphere[fast]` accelerator.
+
+**Released (v0.1.0):** `desphere` + `desphere-native` on PyPI; web page live on
+GitHub Pages (github.com/ucpresearch/desphere, default branch `main`). When
+changing the decoder, keep Python and Rust in lockstep (same fixtures). See
+`docs/STATUS.md`, `RELEASING.md`, and `memories/MEMORY.md`.
 
 ---
 
@@ -173,6 +178,10 @@ Use `uv pip`, never bare `pip`.
   files (mono & stereo, incl. CALLHOME). `src/desphere/shorten.py`.
   QLPC (LPC) blocks ✅ via the black-box `shorten` encoder + ffmpeg (orders 1–20).
   Remaining (low priority): 8/24-bit linear PCM.
+- **Phase D** ✅ — Rust port (`rust/`, byte-identical: lib + WASM + pyo3),
+  **released v0.1.0** (`desphere` + `desphere-native` on PyPI), and the
+  client-side WASM web page (WAV/FLAC output, multi-file → zip), live on GitHub
+  Pages. See `docs/RUST_PORT.md`, `RELEASING.md`, `web/README.md`, `docs/STATUS.md`.
 
 ### Shorten decode notes (hard-won, validated vs ffmpeg)
 

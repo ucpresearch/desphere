@@ -7,8 +7,11 @@ vendored).
 
 ## Features
 
-- **Drop one or many `.sph` files.** One file → direct download. Multiple →
-  a single `.zip`. Per-file errors are reported; the good ones still come through.
+- **Drop one or many `.sph` files** (or click to choose). One file → direct
+  download. Multiple → a single `.zip`. Per-file errors are reported; the good
+  ones still come through. *Drag-and-drop works in Chromium and most browsers;
+  some Firefox/Linux setups reject file drops at the OS level (the `drop` event
+  never fires even with a correct handler), so use the file chooser there.*
 - **Output WAV or FLAC.** WAV is the desphere decode output directly. FLAC is
   produced in-browser from that WAV (lossless), so it matches desphere's lossless
   ethos — and it's smaller.

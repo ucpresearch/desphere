@@ -16,6 +16,9 @@ across the Python `desphere`, the Rust crate `desphere`, and the pyo3 module
   works in Chrome/Firefox/Safari. The encode path is oracle-tested (WAV → FLAC →
   ffmpeg decode → byte-identical PCM). All assets vendored — nothing fetched at
   runtime; nothing leaves the browser.
+- Added a favicon, and a hint that the file chooser is the reliable input where a
+  browser blocks file drag-drop (some Firefox/Linux setups reject file drops at
+  the OS level regardless of the page).
 
 [fflate]: https://github.com/101arrowz/fflate
 [libflac.js]: https://github.com/mmig/libflac.js

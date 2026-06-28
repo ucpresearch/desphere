@@ -7,8 +7,14 @@ Snapshot for resuming work in a fresh session. Read this + `CLAUDE.md` +
 
 MIT-licensed, **clean-room** NIST SPHERE → RIFF/WAV transcoder. Reads `.sph`
 (TIMIT, WSJ, Switchboard, CALLHOME, …), optionally shorten-compressed, and emits
-WAV. CLI: `sph2wav`. Pure Python today (zero deps); see "Roadmap" for the Rust
-intent.
+WAV. CLI: `sph2wav`. Pure-Python reference (zero deps) + an optional Rust
+accelerator + a WASM web page.
+
+**Status: released (v0.1.0).** Live on PyPI — `pip install desphere` (pure) /
+`pip install "desphere[fast]"` (+ the Rust `desphere-native` accelerator). Web
+page live at <https://ucpresearch.github.io/desphere/>. GitHub:
+github.com/ucpresearch/desphere (public; default branch `main`). The Rust port is
+complete and byte-identical (see "Roadmap"). Release process: `RELEASING.md`.
 
 ## Capability matrix (everything ✅ is byte-exact vs an oracle)
 
@@ -22,7 +28,7 @@ intent.
 | μ-law embedded-shorten **with bitshift** | ✅ vs sph2pipe (real CALLHOME, 14.4M samples) + shorten encoder (shift 0–3,12) |
 | shorten QLPC blocks | ✅ vs shorten encoder + ffmpeg (orders 1–20) |
 
-56 tests pass (`pytest`). All "✅" verified byte-for-byte against a black-box
+62 tests pass (`pytest`). All "✅" verified byte-for-byte against a black-box
 oracle (never reading decoder source). A multi-agent review (see git log) then
 hardened the fail-loud paths: a v2-only version gate, header/blocksize/bitshift
 sanity caps (no decode-hang on corrupt input), a decoded-sample-count
@@ -114,8 +120,12 @@ VIRTUAL_ENV=$HOME/local/scr/venvs/desphere uv pip install -e ".[dev]"
 - **No crates.io / npm**: the Rust client and a WASM web app live in the same
   `ucpresearch` org and consume `rust/` via path/git deps directly (praatfan is a
   likely consumer).
-- **Web page**: `web/index.html` — client-side `sph2wav` (WASM), deployed to
-  GitHub Pages by `.github/workflows/pages.yml`. Nothing uploaded.
+- **Web page** (live): `web/index.html` — client-side `sph2wav` (WASM), deployed
+  to GitHub Pages by `.github/workflows/pages.yml`. Converts one or many `.sph` to
+  **WAV or FLAC** (FLAC via vendored libflac.js, oracle-verified lossless; many
+  files → a `.zip` via fflate). Nothing uploaded. Drag-drop works in Chromium;
+  some Firefox/Linux setups reject file drops at the OS level (not fixable in page
+  JS), so the file chooser is the reliable path there.
 - **CLI + web** pass a stray RIFF/WAV through unchanged (with a warning); the
   library API stays strict (SPHERE in, fail loud).
 
@@ -124,7 +134,7 @@ VIRTUAL_ENV=$HOME/local/scr/venvs/desphere uv pip install -e ".[dev]"
 - **Now → Python.** Develop and debug in Python (this repo). Keep the Python
   implementation as the readable reference and for most use — it stays.
 - **Next (optional, low priority):** 8/24-bit linear PCM (see above).
-- **Rust port — COMPLETE & release-ready (v0.1.0)** in `rust/` (crate `desphere`,
+- **Rust port — COMPLETE & RELEASED (v0.1.0)** in `rust/` (crate `desphere`,
   mirrors `praatfan-core-clean`'s layout). Full pipeline ported and byte-for-byte
   identical to Python: SPHERE header, capability gate (PCM 16/32, G.711, shorten
   incl. QLPC + type-8 bitshift), WAV writer, `transcode`, plus **wasm-bindgen**
@@ -134,12 +144,6 @@ VIRTUAL_ENV=$HOME/local/scr/venvs/desphere uv pip install -e ".[dev]"
   shifts so corrupt input fails loud and the decoder never panics (WASM-safe),
   plus metadata/CI/CHANGELOG. `cargo test`/clippy(-D warnings)/fmt clean on the
   default and wasm32 targets; `cargo publish --dry-run` packages cleanly. Guide:
-  `docs/RUST_PORT.md`; clean-room record: `PROVENANCE.md`.
-- **Eventually → Rust** (for a Rust client / WASM, and for speed), mirroring
-  `praatfan-core-clean`'s Python-first-then-Rust approach. The Python decoder is
-  the spec the Rust port validates against; both check against the same oracle
-  outputs / committed fixtures. Rust also fixes the perf gap (the pure-Python
-  shorten decoder is slow on multi-minute files — CALLHOME's 14 M samples take
-  minutes). Concrete porting guidance — integer widths, shift/division
-  semantics, EOF/overflow policy, fixture-based validation — is in
-  `docs/RUST_PORT.md`.
+  `docs/RUST_PORT.md`; clean-room record: `PROVENANCE.md`. Rust also closes the
+  perf gap (pure-Python shorten is slow on multi-minute files — CALLHOME's 14 M
+  samples take minutes); the accelerator delegates the shorten + G.711 kernels.
