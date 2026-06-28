@@ -60,6 +60,11 @@
            accept=".sph,.wav,application/octet-stream" hidden />
   </div>
 
+  <p class="muted" style="text-align: center; margin: .5rem 0 0">
+    Drag-and-drop doesn't work in every browser (notably some Firefox setups) —
+    if a drop doesn't take, click the box to choose files instead.
+  </p>
+
   <div id="out"></div>
 
   <footer>
@@ -261,38 +266,23 @@ function filesFromDrop(dt) {
     if (it.kind === "file") { const f = it.getAsFile(); if (f) out.push(f); }
   return out;
 }
-const dbg = (...a) => console.log("[sph2wav dnd]", ...a);
-const seen = {};
-const once = (tag, ...x) => { if (!seen[tag]) { seen[tag] = true; dbg(tag, ...x); } };
-
-// Make the WHOLE document the drop target (so where you release can't matter),
-// using #drop only for the highlight. preventDefault on dragover is what both
-// makes `drop` fire and stops Firefox from opening/rejecting the file. We also
-// log the drag-effect negotiation (effectAllowed) — if Firefox reports "none",
-// it will reject every drop no matter what, and that's the smoking gun.
-function onDragOver(e) {
+// Drag & drop. The whole page accepts drops (so where you release doesn't
+// matter); #drop just shows the highlight. Works in Chromium and most browsers.
+// Some Firefox/Linux setups reject file drops at the OS level no matter what the
+// page does (dragover is accepted, but the drop is never delivered) — there,
+// clicking the box to choose files is the reliable path.
+document.addEventListener("dragenter", (e) => e.preventDefault());
+document.addEventListener("dragover", (e) => {
   e.preventDefault();
   if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
-  once("dragover",
-    "effectAllowed=" + (e.dataTransfer && e.dataTransfer.effectAllowed) +
-    " dropEffect=" + (e.dataTransfer && e.dataTransfer.dropEffect) +
-    " types=" + JSON.stringify(e.dataTransfer && [...(e.dataTransfer.types || [])]));
-}
-function onDrop(e) {
+});
+document.addEventListener("drop", (e) => {
   e.preventDefault();
   drop.classList.remove("over");
-  const dt = e.dataTransfer;
-  const files = filesFromDrop(dt);
-  dbg("DROP fired", { files: files.length,
-    items: dt && dt.items && dt.items.length, effectAllowed: dt && dt.effectAllowed });
+  const files = filesFromDrop(e.dataTransfer);
   if (files.length) handleFiles(files);
-  else out.innerHTML = `<p class="err">The drop fired but no files came through.</p>`;
-}
-document.addEventListener("dragenter", (e) => { e.preventDefault(); once("dragenter"); });
-document.addEventListener("dragover", onDragOver);
-document.addEventListener("drop", onDrop);
+});
 drop.addEventListener("dragenter", () => drop.classList.add("over"));
-drop.addEventListener("dragover", () => drop.classList.add("over"));
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 </script>
 </body>
