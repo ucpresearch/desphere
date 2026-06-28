@@ -65,21 +65,12 @@ jobs:
           name: dist-native-${{ matrix.os }}-${{ matrix.target }}
           path: rust/dist/*
 
-  build-native-sdist:
-    name: Build native sdist
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build sdist
-        uses: PyO3/maturin-action@v1
-        with:
-          working-directory: rust
-          command: sdist
-          args: --out dist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-native-sdist
-          path: rust/dist/*
+  # desphere-native is published as WHEELS ONLY (abi3, one per platform). No
+  # native sdist: maturin's sdist of a virtual-workspace member nests the crate
+  # under rust/, so its LICENSE lands at rust/LICENSE while the metadata says
+  # `License-File: LICENSE` — PyPI rejects that. And the accelerator is optional:
+  # if no wheel matches a platform, desphere falls back to pure Python. The pure
+  # `desphere` package provides the source-installable path.
 
   # ---- publish (only on a version tag) ---------------------------------------
   publish-pure:
@@ -96,10 +87,12 @@ jobs:
           name: dist-pure
           path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
 
   publish-native:
     name: Publish desphere-native to PyPI
-    needs: [build-native-wheels, build-native-sdist]
+    needs: [build-native-wheels]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: pypi-desphere-native
@@ -112,3 +105,5 @@ jobs:
           path: dist
           merge-multiple: true
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true

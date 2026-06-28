@@ -62,9 +62,13 @@ registering the same trusted publishers there.)
    git push && git push --tags
    ```
 4. The `Release` workflow builds the pure sdist+wheel and the native abi3 wheels
-   (linux x86_64/aarch64, macOS universal2, Windows x64) + native sdist, then
-   publishes each project from its environment. Watch it under **Actions**; if you
-   set required reviewers, approve each environment.
+   (linux x86_64/aarch64, macOS universal2, Windows x64), then publishes each
+   project from its environment. `desphere-native` is **wheels-only** (no sdist —
+   the optional accelerator degrades to pure Python where no wheel matches; the
+   pure `desphere` provides the source-installable path). Both publish steps use
+   `skip-existing: true`, so re-running after a partial upload only fills the gaps.
+   Watch it under **Actions**; if you set required reviewers, approve each
+   environment.
 
 ### Dry run (no publish)
 
