@@ -247,24 +247,47 @@ drop.addEventListener("keydown", (e) => {
 });
 fileInput.addEventListener("change", () => handleFiles(fileInput.files));
 
-// Drag & drop. Firefox in particular navigates to (opens) a dropped file unless
-// the default is prevented on the *window* for every drag event — and it only
-// fires `drop` if `dragover`'s default is prevented and a dropEffect is set.
-const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
+// Drag & drop. The page must preventDefault on dragover (so `drop` fires at all)
+// and on the window for every drag event (so the browser doesn't just open the
+// dropped file). No stopPropagation — Firefox can drop the event with it.
+function filesFromDrop(dt) {
+  if (!dt) return [];
+  if (dt.files && dt.files.length) return [...dt.files];
+  const out = []; // fallback: some browsers populate items[] but not files
+  for (const it of dt.items || [])
+    if (it.kind === "file") { const f = it.getAsFile(); if (f) out.push(f); }
+  return out;
+}
+const dbg = (...a) => console.log("[sph2wav dnd]", ...a);
 ["dragenter", "dragover", "dragleave", "drop"].forEach((ev) =>
-  window.addEventListener(ev, (e) => e.preventDefault()));
+  window.addEventListener(ev, (e) => {
+    e.preventDefault();
+    if (ev === "drop")
+      dbg("window drop; target =", e.target && (e.target.id || e.target.nodeName));
+  }));
+let enterLogged = false;
 ["dragenter", "dragover"].forEach((ev) =>
   drop.addEventListener(ev, (e) => {
-    swallow(e);
+    e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
     drop.classList.add("over");
+    if (!enterLogged) { enterLogged = true; dbg("zone", ev, "fired"); }
   }));
 ["dragleave", "dragend"].forEach((ev) =>
-  drop.addEventListener(ev, (e) => { swallow(e); drop.classList.remove("over"); }));
+  drop.addEventListener(ev, () => drop.classList.remove("over")));
 drop.addEventListener("drop", (e) => {
-  swallow(e);
+  e.preventDefault();
   drop.classList.remove("over");
-  if (e.dataTransfer) handleFiles(e.dataTransfer.files);
+  const dt = e.dataTransfer;
+  dbg("zone drop fired", {
+    files: dt && dt.files && dt.files.length,
+    items: dt && dt.items && dt.items.length,
+    types: dt && [...(dt.types || [])],
+  });
+  const files = filesFromDrop(dt);
+  if (files.length) handleFiles(files);
+  else out.innerHTML = `<p class="err">The drop didn't deliver any files — ` +
+    `click the box to pick files instead, and please let me know it did this.</p>`;
 });
 </script>
 </body>
