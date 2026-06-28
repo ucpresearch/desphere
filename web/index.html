@@ -259,22 +259,25 @@ function filesFromDrop(dt) {
   return out;
 }
 const dbg = (...a) => console.log("[sph2wav dnd]", ...a);
-["dragenter", "dragover", "dragleave", "drop"].forEach((ev) =>
-  window.addEventListener(ev, (e) => {
-    e.preventDefault();
-    if (ev === "drop")
-      dbg("window drop; target =", e.target && (e.target.id || e.target.nodeName));
-  }));
-let enterLogged = false;
+const seen = {};
+const once = (tag) => { if (!seen[tag]) { seen[tag] = true; dbg(tag); } };
+// window: confirm each event type reaches the page; always log drop
+["dragenter", "dragover", "dragleave"].forEach((ev) =>
+  window.addEventListener(ev, (e) => { e.preventDefault(); once("window " + ev); }));
+window.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dbg("window drop; target =", e.target && (e.target.id || e.target.nodeName));
+});
+// zone: log each event type once so we can see if dragover actually fires
 ["dragenter", "dragover"].forEach((ev) =>
   drop.addEventListener(ev, (e) => {
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
     drop.classList.add("over");
-    if (!enterLogged) { enterLogged = true; dbg("zone", ev, "fired"); }
+    once("zone " + ev);
   }));
 ["dragleave", "dragend"].forEach((ev) =>
-  drop.addEventListener(ev, () => drop.classList.remove("over")));
+  drop.addEventListener(ev, () => { drop.classList.remove("over"); once("zone " + ev); }));
 drop.addEventListener("drop", (e) => {
   e.preventDefault();
   drop.classList.remove("over");
