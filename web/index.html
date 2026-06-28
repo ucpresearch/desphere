@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" href="./favicon.svg" type="image/svg+xml" />
 <title>sph2wav — desphere</title>
 <style>
   :root { color-scheme: light dark; }
@@ -101,7 +102,7 @@ function loadFflate() {
   return (fflateP ||= loadScript("./vendor/fflate.min.js").then(() => self.fflate));
 }
 function loadFlac() {
-  return (flacP ||= loadScript("./vendor/libflac/libflac.min.js").then(
+  return (flacP ||= loadScript("./vendor/libflac/libflac.min.wasm.js").then(
     () => new Promise((resolve, reject) => {
       const F = self.Flac;
       if (!F) return reject(new Error("FLAC encoder failed to initialize"));
@@ -241,13 +242,30 @@ async function handleFiles(fileList) {
 }
 
 drop.addEventListener("click", () => fileInput.click());
-drop.addEventListener("keydown", (e) => { if (e.key === "Enter") fileInput.click(); });
+drop.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
+});
 fileInput.addEventListener("change", () => handleFiles(fileInput.files));
-["dragover", "dragenter"].forEach((ev) =>
-  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
-["dragleave", "drop"].forEach((ev) =>
-  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
+
+// Drag & drop. Firefox in particular navigates to (opens) a dropped file unless
+// the default is prevented on the *window* for every drag event — and it only
+// fires `drop` if `dragover`'s default is prevented and a dropEffect is set.
+const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
+["dragenter", "dragover", "dragleave", "drop"].forEach((ev) =>
+  window.addEventListener(ev, (e) => e.preventDefault()));
+["dragenter", "dragover"].forEach((ev) =>
+  drop.addEventListener(ev, (e) => {
+    swallow(e);
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    drop.classList.add("over");
+  }));
+["dragleave", "dragend"].forEach((ev) =>
+  drop.addEventListener(ev, (e) => { swallow(e); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => {
+  swallow(e);
+  drop.classList.remove("over");
+  if (e.dataTransfer) handleFiles(e.dataTransfer.files);
+});
 </script>
 </body>
 </html>
