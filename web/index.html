@@ -23,6 +23,9 @@
   #drop { border: 2px dashed #999; border-radius: 12px; padding: 2.5rem 1rem;
           text-align: center; cursor: pointer; transition: .15s; }
   #drop.over { border-color: #3b82f6; background: rgba(59,130,246,.08); }
+  /* Children must not be drag/pointer targets, or Firefox fires dragleave when
+     the cursor crosses them and never delivers the drop. */
+  #drop * { pointer-events: none; }
   #out { margin-top: 1.2rem; }
   .err { color: #c0392b; } .ok { color: #1e874b; }
   ul.files { margin: .4rem 0 0; padding-left: 1.2rem; }
