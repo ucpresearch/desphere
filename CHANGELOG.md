@@ -5,7 +5,7 @@ recorded here. Format loosely follows [Keep a Changelog]; versions are shared
 across the Python `desphere`, the Rust crate `desphere`, and the pyo3 module
 `desphere-native`.
 
-## [0.1.0] — first release
+## [0.1.0] — 2026-06-28 (first release)
 
 First public release. NIST SPHERE → RIFF/WAV transcoder, clean-room and
 MIT-licensed (see `PROVENANCE.md`).
