@@ -15,11 +15,16 @@
   @media (prefers-color-scheme: dark) {
     .note { background: #2a2410; border-color: #5a4d1a; color: #e8d9a0; }
   }
+  .opts { margin: 1.2rem 0 .4rem; display: flex; gap: 1.2rem; align-items: center;
+          flex-wrap: wrap; }
+  .opts label { cursor: pointer; }
+  .muted { color: #888; font-size: .9em; }
   #drop { border: 2px dashed #999; border-radius: 12px; padding: 2.5rem 1rem;
           text-align: center; cursor: pointer; transition: .15s; }
   #drop.over { border-color: #3b82f6; background: rgba(59,130,246,.08); }
   #out { margin-top: 1.2rem; }
   .err { color: #c0392b; } .ok { color: #1e874b; }
+  ul.files { margin: .4rem 0 0; padding-left: 1.2rem; }
   a.dl { display: inline-block; margin-top: .5rem; font-weight: 600; }
   code { background: rgba(127,127,127,.18); padding: .05em .35em; border-radius: 4px; }
   footer { margin-top: 2.5rem; color: #888; font-size: .9rem; }
@@ -27,20 +32,28 @@
 </head>
 <body>
   <h1>sph2wav</h1>
-  <p class="sub">Flatten a NIST SPHERE file into a plain WAV — in your browser.</p>
+  <p class="sub">Flatten NIST SPHERE files into plain WAV or FLAC — in your browser.</p>
 
   <div class="note">
     <strong>Please don't use this if a real tool can do the job.</strong>
     <code>sph2pipe</code>, <code>ffmpeg</code>, and <code>sox</code> all decode
     SPHERE. But we know they're old and awkward to install — so if that's in your
-    way, drop a <code>.sph</code> file below and get a <code>.wav</code> back.
-    <strong>Everything runs locally in this page; your file is never uploaded
+    way, drop your <code>.sph</code> file(s) below and get them back converted.
+    <strong>Everything runs locally in this page; your files are never uploaded
     anywhere.</strong>
   </div>
 
+  <div class="opts">
+    <span>Output:</span>
+    <label><input type="radio" name="fmt" value="wav" checked /> WAV</label>
+    <label><input type="radio" name="fmt" value="flac" /> FLAC
+      <span class="muted">(lossless, smaller)</span></label>
+  </div>
+
   <div id="drop" tabindex="0">
-    <strong>Drop a .sph file here</strong><br />or click to choose
-    <input id="file" type="file" accept=".sph,.wav,application/octet-stream" hidden />
+    <strong>Drop .sph file(s) here</strong><br />or click to choose
+    <input id="file" type="file" multiple
+           accept=".sph,.wav,application/octet-stream" hidden />
   </div>
 
   <div id="out"></div>
@@ -48,8 +61,10 @@
   <footer>
     desphere — clean-room, MIT-licensed, zero-server. PCM, G.711 μ-law/a-law, and
     embedded-shorten (incl. QLPC &amp; μ-law type-8). Decoding compiled to WebAssembly
-    from the desphere Rust core.
-    <a href="https://github.com/ucpresearch/desphere">source</a>.
+    from the desphere Rust core. FLAC via
+    <a href="https://github.com/mmig/libflac.js">libflac.js</a>; zip via
+    <a href="https://github.com/101arrowz/fflate">fflate</a> — both bundled, nothing
+    fetched at runtime. <a href="https://github.com/ucpresearch/desphere">source</a>.
   </footer>
 
 <script type="module">
@@ -58,34 +73,165 @@ import init, { transcode } from "./pkg/desphere.js";
 const drop = document.getElementById("drop");
 const fileInput = document.getElementById("file");
 const out = document.getElementById("out");
-let ready = init().catch((e) => { out.innerHTML =
-  `<p class="err">Failed to load the decoder: ${e}</p>`; throw e; });
+
+const ready = init().catch((e) => {
+  out.innerHTML = `<p class="err">Failed to load the decoder: ${e}</p>`;
+  throw e;
+});
+
+let outputFormat = "wav";
+document.querySelectorAll('input[name="fmt"]').forEach((r) =>
+  r.addEventListener("change", () => { if (r.checked) outputFormat = r.value; }));
+
+// ---- lazy-loaded vendored helpers (only fetched the first time they're needed)
+let fflateP, flacP;
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+}
+function loadFflate() {
+  return (fflateP ||= loadScript("./vendor/fflate.min.js").then(() => self.fflate));
+}
+function loadFlac() {
+  return (flacP ||= loadScript("./vendor/libflac/libflac.min.js").then(
+    () => new Promise((resolve, reject) => {
+      const F = self.Flac;
+      if (!F) return reject(new Error("FLAC encoder failed to initialize"));
+      if (F.isReady && F.isReady()) resolve(F);
+      else F.on("ready", () => resolve(F));
+    })));
+}
 
 const isWav = (u8) =>
   u8.length >= 12 &&
   u8[0] === 0x52 && u8[1] === 0x49 && u8[2] === 0x46 && u8[3] === 0x46 && // RIFF
   u8[8] === 0x57 && u8[9] === 0x41 && u8[10] === 0x56 && u8[11] === 0x45; // WAVE
 
-function offerDownload(bytes, name, msgHtml) {
-  const url = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+// Parse the canonical RIFF/PCM that desphere emits -> {channels, sampleRate,
+// bitsPerSample, pcm}. Walks chunks so it tolerates extra ones.
+function parseWav(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (dv.getUint32(0) !== 0x52494646 || dv.getUint32(8) !== 0x57415645)
+    throw new Error("not a RIFF/WAVE file");
+  let off = 12, fmt = null, dataOff = -1, dataLen = 0;
+  while (off + 8 <= bytes.byteLength) {
+    const id = dv.getUint32(off), size = dv.getUint32(off + 4, true), body = off + 8;
+    if (id === 0x666d7420) // 'fmt '
+      fmt = { channels: dv.getUint16(body + 2, true),
+              sampleRate: dv.getUint32(body + 4, true),
+              bitsPerSample: dv.getUint16(body + 14, true) };
+    else if (id === 0x64617461) { dataOff = body; dataLen = size; } // 'data'
+    off = body + size + (size & 1); // chunks are word-aligned
+  }
+  if (!fmt || dataOff < 0) throw new Error("WAV missing fmt/data chunk");
+  const pcm = new Uint8Array(bytes.buffer, bytes.byteOffset + dataOff,
+                             Math.min(dataLen, bytes.byteLength - dataOff));
+  return { ...fmt, pcm };
+}
+
+// WAV (LE PCM) -> FLAC. Samples go to libflac as an interleaved Int32Array, each
+// sample sign-extended to 32 bits (per the libflac.js encode contract).
+async function wavToFlac(wavBytes) {
+  const { channels, sampleRate, bitsPerSample, pcm } = parseWav(wavBytes);
+  const dv = new DataView(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+  let samples;
+  if (bitsPerSample === 16) {
+    const n = pcm.byteLength >> 1;
+    samples = new Int32Array(n);
+    for (let i = 0; i < n; i++) samples[i] = dv.getInt16(i * 2, true);
+  } else if (bitsPerSample === 24) {
+    const n = (pcm.byteLength / 3) | 0;
+    samples = new Int32Array(n);
+    for (let i = 0; i < n; i++) {
+      let v = pcm[i * 3] | (pcm[i * 3 + 1] << 8) | (pcm[i * 3 + 2] << 16);
+      if (v & 0x800000) v |= ~0xffffff; // sign-extend 24->32
+      samples[i] = v;
+    }
+  } else if (bitsPerSample === 32) {
+    const n = pcm.byteLength >> 2;
+    samples = new Int32Array(n);
+    for (let i = 0; i < n; i++) samples[i] = dv.getInt32(i * 4, true);
+  } else {
+    throw new Error(`can't FLAC-encode ${bitsPerSample}-bit audio`);
+  }
+
+  const Flac = await loadFlac();
+  const total = samples.length / channels; // samples per channel
+  const enc = Flac.create_libflac_encoder(sampleRate, channels, bitsPerSample, 5, total);
+  if (!enc) throw new Error("FLAC: could not create encoder");
+  const chunks = [];
+  const status = Flac.init_encoder_stream(enc, (data) => chunks.push(data.slice()));
+  if (status !== 0) { Flac.FLAC__stream_encoder_delete(enc);
+    throw new Error(`FLAC: encoder init failed (${status})`); }
+  const ok = Flac.FLAC__stream_encoder_process_interleaved(enc, samples, total);
+  Flac.FLAC__stream_encoder_finish(enc);
+  Flac.FLAC__stream_encoder_delete(enc);
+  if (!ok) throw new Error("FLAC: encoding failed");
+  let len = 0; for (const c of chunks) len += c.length;
+  const flac = new Uint8Array(len);
+  let o = 0; for (const c of chunks) { flac.set(c, o); o += c.length; }
+  return flac;
+}
+
+// One input file -> {name, bytes}. SPHERE decodes; a stray WAV passes through
+// (or is re-encoded if FLAC was chosen). Throws (with desphere's exact message)
+// on malformed input.
+async function processOne(file) {
+  const u8 = new Uint8Array(await file.arrayBuffer());
+  const base = file.name.replace(/\.(sph|wav|flac)$/i, "");
+  const wav = isWav(u8) ? u8 : transcode(u8);
+  if (outputFormat === "flac")
+    return { name: base + ".flac", bytes: await wavToFlac(wav) };
+  return { name: base + ".wav", bytes: wav, passthrough: isWav(u8) };
+}
+
+function download(bytes, name, mime, msgHtml) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
   out.innerHTML = msgHtml +
     `<br /><a class="dl" href="${url}" download="${name}">⬇ download ${name}</a>`;
 }
 
-async function handle(file) {
-  out.textContent = "Decoding…";
+async function handleFiles(fileList) {
+  const files = [...fileList];
+  if (!files.length) return;
+  out.textContent = files.length === 1
+    ? "Decoding…"
+    : `Processing ${files.length} files…`;
   try {
     await ready;
-    const u8 = new Uint8Array(await file.arrayBuffer());
-    const base = file.name.replace(/\.(sph|wav)$/i, "");
-    if (isWav(u8)) {
-      offerDownload(u8, base + ".wav",
-        `<span class="ok">That's already a RIFF/WAV file</span> — nothing to do; here it is back.`);
+    const results = [], errors = [];
+    for (const f of files) {
+      try { results.push(await processOne(f)); }
+      catch (e) { errors.push({ name: f.name, msg: String(e.message || e) }); }
+    }
+    const errHtml = errors.length
+      ? `<p class="err">${errors.length} failed:</p><ul class="files">` +
+        errors.map((e) => `<li class="err">${e.name}: ${e.msg}</li>`).join("") + "</ul>"
+      : "";
+    if (!results.length) { out.innerHTML = errHtml || `<p class="err">Nothing to convert.</p>`; return; }
+
+    if (results.length === 1) {
+      const r = results[0];
+      const mime = r.name.endsWith(".flac") ? "audio/flac" : "audio/wav";
+      const msg = r.passthrough
+        ? `<span class="ok">That's already a RIFF/WAV file</span> — here it is back.`
+        : `<span class="ok">Done.</span> → ${r.bytes.length.toLocaleString()} bytes.`;
+      download(r.bytes, r.name, mime, msg + errHtml);
       return;
     }
-    const wav = transcode(u8); // throws on malformed input, with the exact message
-    offerDownload(wav, base + ".wav",
-      `<span class="ok">Done.</span> ${u8.length.toLocaleString()} bytes in → ${wav.length.toLocaleString()} bytes WAV.`);
+    // multiple -> one zip (store already-compressed FLAC, deflate WAV)
+    const fflate = await loadFflate();
+    const entries = {};
+    for (const r of results)
+      entries[r.name] = [r.bytes, { level: r.name.endsWith(".flac") ? 0 : 6 }];
+    const zip = fflate.zipSync(entries);
+    download(zip, "desphere-output.zip", "application/zip",
+      `<span class="ok">Converted ${results.length} files.</span>` + errHtml);
   } catch (e) {
     out.innerHTML = `<p class="err">${String(e.message || e)}</p>`;
   }
@@ -93,12 +239,12 @@ async function handle(file) {
 
 drop.addEventListener("click", () => fileInput.click());
 drop.addEventListener("keydown", (e) => { if (e.key === "Enter") fileInput.click(); });
-fileInput.addEventListener("change", () => { if (fileInput.files[0]) handle(fileInput.files[0]); });
+fileInput.addEventListener("change", () => handleFiles(fileInput.files));
 ["dragover", "dragenter"].forEach((ev) =>
   drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach((ev) =>
   drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", (e) => { if (e.dataTransfer.files[0]) handle(e.dataTransfer.files[0]); });
+drop.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
 </script>
 </body>
 </html>

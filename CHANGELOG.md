@@ -5,6 +5,21 @@ recorded here. Format loosely follows [Keep a Changelog]; versions are shared
 across the Python `desphere`, the Rust crate `desphere`, and the pyo3 module
 `desphere-native`.
 
+## [Unreleased]
+
+### Web page (`web/`, client-side sph2wav)
+- **Multi-file**: drop many `.sph` at once — one file downloads directly, several
+  bundle into a single `.zip` (via vendored [fflate], MIT). Per-file errors are
+  reported; successes still come through.
+- **FLAC output** alongside WAV, encoded in-browser (lossless) via vendored
+  [libflac.js] (MIT wrapper / Xiph BSD libFLAC), loaded lazily only when chosen;
+  works in Chrome/Firefox/Safari. The encode path is oracle-tested (WAV → FLAC →
+  ffmpeg decode → byte-identical PCM). All assets vendored — nothing fetched at
+  runtime; nothing leaves the browser.
+
+[fflate]: https://github.com/101arrowz/fflate
+[libflac.js]: https://github.com/mmig/libflac.js
+
 ## [0.1.0] — 2026-06-28 (first release)
 
 First public release. NIST SPHERE → RIFF/WAV transcoder, clean-room and
